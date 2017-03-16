@@ -21,7 +21,7 @@ function BackendPricesUpdate()
 	updateBterMarkets();
 	//updateEmpoexMarkets();
 	updateJubiMarkets();
-	updateLivecoinMarkets();
+	updateLiveCoinMarkets();
 	updateNovaMarkets();
 
 	updateShapeShiftMarkets();
@@ -1015,12 +1015,13 @@ function updateEmpoexMarkets()
 	}
 }
 
-function updateLivecoinMarkets()
+function updateLiveCoinMarkets()
 {
 	$exchange = 'livecoin';
 	if (exchange_get($exchange, 'disabled')) return;
 
-	$markets = livecoin_api_query('exchange/ticker');
+	$livecoin = new LiveCoinApi;
+	$markets = $livecoin->getTickerInfo();
 	if(!is_array($markets)) return;
 
 	$list = getdbolist('db_markets', "name='$exchange'");
@@ -1064,7 +1065,7 @@ function updateLivecoinMarkets()
 				if(empty($market->deposit_address) && !$last_checked)
 				{
 					sleep(1);
-					$data = livecoin_api_user('payment/get/address', array('currency'=>$coin->symbol));
+					$data = $livecoin->getDepositAddress($coin->symbol);
 					if(!empty($data) && objSafeVal($data, 'wallet', '') != '') {
 						$addr = arraySafeVal($data, 'wallet');
 						if (!empty($addr) && $addr != $market->deposit_address) {
