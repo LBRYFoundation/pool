@@ -173,18 +173,16 @@ function updateRawcoins()
 	}
 
 	if (!exchange_get('livecoin', 'disabled')) {
-		$livecoin = new LiveCoinApi;
-		$list = $livecoin->getTickerInfo();
+		$list = livecoin_api_query('exchange/ticker');
 		if(is_array($list))
 		{
 			dborun("UPDATE markets SET deleted=true WHERE name='livecoin'");
 			foreach($list as $item) {
 				$e = explode('/', $item->symbol);
-				$symbol = $e[0];
-				$base = $e[1];
-				if ($base != 'BTC') {
+				$base = strtoupper($e[1]);
+				if ($base != 'BTC')
 					continue;
-				}
+				$symbol = strtoupper($e[0]);
 				updateRawCoin('livecoin', $symbol);
 			}
 		}

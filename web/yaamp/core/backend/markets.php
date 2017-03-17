@@ -1020,8 +1020,7 @@ function updateLiveCoinMarkets()
 	$exchange = 'livecoin';
 	if (exchange_get($exchange, 'disabled')) return;
 
-	$livecoin = new LiveCoinApi;
-	$markets = $livecoin->getTickerInfo();
+	$markets = livecoin_api_query('exchange/ticker');
 	if(!is_array($markets)) return;
 
 	$list = getdbolist('db_markets', "name='$exchange'");
@@ -1065,6 +1064,7 @@ function updateLiveCoinMarkets()
 				if(empty($market->deposit_address) && !$last_checked)
 				{
 					sleep(1);
+					$livecoin = new LiveCoinApi();
 					$data = $livecoin->getDepositAddress($coin->symbol);
 					if(!empty($data) && objSafeVal($data, 'wallet', '') != '') {
 						$addr = arraySafeVal($data, 'wallet');
