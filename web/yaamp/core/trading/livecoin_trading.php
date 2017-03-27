@@ -101,6 +101,10 @@ function doLiveCoinTrading($quick = false)
 		$flushall = false;
 	}
 
+	$min_btc_trade = exchange_get($exchange, 'trade_min_btc', 0.0001);
+	$sell_ask_pct = exchange_get($exchange, 'trade_sell_ask_pct', 1.05);
+	$cancel_ask_pct = exchange_get($exchange, 'trade_cancel_ask_pct', 1.20);
+
 	// upgrade orders
 	$coins = getdbolist('db_coins', "enable=1 AND IFNULL(dontsell,0)=0 AND id IN (SELECT DISTINCT coinid FROM markets WHERE name='livecoin')");
 	foreach ($coins as $coin) {
@@ -177,13 +181,13 @@ function doLiveCoinTrading($quick = false)
 	}
 
 	foreach ($balances as $balance) {
-		if ($balance->type != 'total') {
+		if ($balance->type != 'available') {
 			continue;
 		}
 
 		$amount = $balance->value;
 		$symbol = $balance->currency;
-		if (!$amount || $symbol == 'BTC') {
+		if (!$balance || $symbol == 'BTC') {
 			continue;
 		}
 
@@ -207,59 +211,27 @@ function doLiveCoinTrading($quick = false)
 			continue;
 		}
 
+		sleep(1);
+
 		$pair = "$symbol/BTC";
-		$maxprice = 0;
-		$maxamount = 0;
-
-		sleep(1);
-		$orders = $livecoin->getOrderBook($pair);
-
-		if (!empty($orders) && !empty($orders->bids)) {
-			foreach ($orders->bids as $order) {
-				if ($order[0] > $maxprice) {
-					$maxprice = $order[0];
-					$maxamount = $order[1];
-				}
-			}
-		}
-
-		if ($amount >= $maxamount && $maxamount*$maxprice > $min_btc_trade) {
-			$sellprice = bitcoinvaluetoa($maxprice);
-			debuglog("LiveCoin: Selling market $pair, $maxamount, $sellprice");
-			sleep(1);
-
-			// This needs to be simplified.
-			// Make sure API methods return a value?
-			$res = $livecoin->sellLimit($pair, $sellprice, $maxamount);
-			if (!$res) {
-				debuglog('LiveCoin: Sell failed');
-			} else {
-				$success = 'false';
-				if (isset($res->success)) {
-					$success = $res->success;
-				}
-				if ($success == 'false') {
-					debuglog('LiveCoin: Sell failed');
-				} else {
-					$amount -= $maxamount;
-				}
-			}
-			sleep(1);
-		}
-
-		sleep(1);
 		$ticker = $livecoin->getTickerInfo($pair);
-		if (!$ticker) {
-			continue;
-		}
 
-		$sellprice = bitcoinvaluetoa($ticker->best_ask);
+		if(!isset($tickers[$pair])) continue;
 
-		sleep(1);
-		$res = $livecoin->sellLimit($pair, $sellprice, $amount);
+		if($coin->sellonbid)
+			$sellprice = bitcoinvaluetoa($ticker->best_bid);
+		else
+			$sellprice = bitcoinvaluetoa($ticker->best_ask * $sell_ask_pct);
 
-		if (!($res->success == 'true' && $res->added == 'true')) {
-			continue;
+		if ($amount*$sellprice > $min_btc_trade) {
+			debuglog("LiveCoin: Selling market $pair, $sellprice, $sellprice");
+			sleep(1);
+
+			$res = $livecoin->sellLimit($pair, $sellprice, $amount);
+			if (!$res->success == 'true' && $res->added == 'true') {
+				debuglog('LiveCoin: Sell failed');
+				continue;
+			}
 		}
 
 		$db_order = new db_orders;
