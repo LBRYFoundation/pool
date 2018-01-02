@@ -1,7 +1,7 @@
 <br>
 
 <div class="main-left-box">
-<div class="main-left-title">YiiMP API</div>
+<div class="main-left-title">LBRY COMMUNITY POOL API</div>
 <div class="main-left-inner">
 
 <p>Simple REST API.</p>
