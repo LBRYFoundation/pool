@@ -11,7 +11,7 @@ p.notes { opacity: 0.7; }
 </style>
 <div id="main_results"></div>
 
-<p class="notes">This table show all non-zero balances tracked by yiimp. It also allow manual API calls to manually check the exchange API reliability</p>
+<p class="notes">This table show all non-zero balances tracked by Lbry Community Pool. It also allow manual API calls to manually check the exchange API reliability</p>
 
 <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
 <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
