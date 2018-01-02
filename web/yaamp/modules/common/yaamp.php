@@ -7,7 +7,7 @@
 
 <br>
 
-GOTO <a href="http://<?= YAAMP_SITE_URL ?>">YIIMP</a>
+GOTO <a href="http://<?= YAAMP_SITE_URL ?>">Lbry Community Pool</a>
 
 <br><br><br><br><br>
 
