@@ -1,10 +1,10 @@
 <br>
 
 <div class="main-left-box">
-<div class="main-left-title">YIIMP BENCHMARKS</div>
+<div class="main-left-title">LBRY COMMUNITY POOL BENCHMARKS</div>
 <div class="main-left-inner">
 
-<p style="width: 700px;">YiiMP now allow users to share their ccminer (1.7.6+) device hashrate, more supported miners will come later.</p>
+<p style="width: 700px;">LBRY Community Pool now allow users to share their ccminer (1.7.6+) device hashrate, more supported miners will come later.</p>
 
 <pre class="main-left-box" style='padding: 3px; font-size: .9em; background-color: #ffffee; font-family: monospace;'>
 -o stratum+tcp://<?= YAAMP_STRATUM_URL ?>:&lt;PORT&gt; -a &lt;algo&gt; -u &lt;wallet_adress&gt; -p stats
