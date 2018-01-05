@@ -1,62 +1,16 @@
-#yiimp - yaamp fork
+Lbry Mining Pool based on Yiimp
 
-Required:
+To install the pool you will need:
+1. Ubuntu 16.04 VPS
+2. Install Script
 
-	linux, mysql, php, memcached, a webserver (lighttpd or nginx recommended)
+The install Script will install the pool and all dependencies needed.
 
-
-Config for nginx:
-
-	location / {
-		try_files $uri @rewrite;
-	}
-
-	location @rewrite {
-		rewrite ^/(.*)$ /index.php?r=$1;
-	}
-
-	location ~ \.php$ {
-		fastcgi_pass unix:/var/run/php5-fpm.sock;
-		fastcgi_index index.php;
-		include fastcgi_params;
-	}
-
-
-If you use apache, it should be something like that (already set in web/.htaccess):
-
-	RewriteEngine on
-
-	RewriteCond %{REQUEST_FILENAME} !-f
-	RewriteRule ^(.*) index.php?r=$1 [QSA]
-
-
-If you use lighttpd, use the following config:
-
-	$HTTP["host"] =~ "yiimp.ccminer.org" {
-	        server.document-root = "/var/yaamp/web"
-	        url.rewrite-if-not-file = (
-			"^(.*)/([0-9]+)$" => "index.php?r=$1&id=$2",
-			"^(.*)\?(.*)" => "index.php?r=$1&$2",
-	                "^(.*)" => "index.php?r=$1",
-	                "." => "index.php"
-	        )
-
-		url.access-deny = ( "~", ".dat", ".log" )
-	}
-
-
-For the database, import the initial dump present in the sql/ folder
-
-Then, apply the migration scripts to be in sync with the current git, they are sorted by date of change.
-
-Your database need at least 2 users, one for the web site (php) and one for the stratum connections (password set in config/algo.conf).
-
-
-
-The recommended install folder for the stratum engine is /var/stratum. Copy all the .conf files, run.sh, the stratum binary and the blocknotify binary to this folder. 
-
-Some scripts are expecting the web folder to be /var/web. You can use directory symlinks...
-
+TO INSTALL:
+1. Log in to VPS
+2. Create new user - sudo adduser (username)
+3. Add user to sudo group - sudo adduser (username) sudo
+4. 
 
 Add your exchange API public and secret keys in these two separated files:
 
