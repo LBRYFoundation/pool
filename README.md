@@ -10,7 +10,12 @@ TO INSTALL:
 1. Log in to VPS
 2. Create new user - sudo adduser (username)
 3. Add user to sudo group - sudo adduser (username) sudo
-4. 
+4. Log in to new user - sudo su (username)
+5. wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh
+6. Follow the instructions on the screen.
+
+This will setup the pool ready for coin daemons to be added.
+
 
 Add your exchange API public and secret keys in these two separated files:
 
