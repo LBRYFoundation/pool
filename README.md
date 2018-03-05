@@ -35,18 +35,18 @@ Here you need to do the following:
 1. Edit algo to lbry
 2. Edit image to /images/coin-LBRY.png
 3. Edit Daemon information to the following:
-3.1 process name - lbrycrdd
-3.2 Conf.folder - .lbrycrd
-3.3 RPC Host - 127.0.0.1
-3.4 RPC User - This is the Username at the end of the install script. 
-3.5 RPC Password - This is the Password at the end of the install script.
-3.6 RPC Type - POW
-4. Edit Settings and tick the following boxes:
-4.1 Enable
-4.2 Auto Ready
-4.3 Visable
-4.4 Installed
-5. Click Save
+4. process name - lbrycrdd
+5. Conf.folder - .lbrycrd
+6. RPC Host - 127.0.0.1
+7. RPC User - This is the Username at the end of the install script. 
+8. RPC Password - This is the Password at the end of the install script.
+9. RPC Type - POW
+10. Edit Settings and tick the following boxes:
+11. Enable
+12. Auto Ready
+13. Visable
+14. Installed
+15. Click Save
 
 Once you have clicked save, you need to restart the lbry daemon in the VPS:
 1. lbrycrd-cli stop
