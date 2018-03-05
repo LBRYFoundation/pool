@@ -1,12 +1,9 @@
 #!/bin/bash
 ################################################################################
-# Author:   
-# 
-# Web:      
+# Author: Oakey22
 #
 # Program:
-#   Install yiimp on Ubuntu 16.04 running Nginx, MariaDB, and php7.x
-# BTC Donation: 
+#   Install Lbry Pool on Ubuntu 16.04 running Nginx, MariaDB, and php7.x
 # 
 ################################################################################
 output() {
@@ -127,33 +124,7 @@ default         0;
     sudo ufw allow ssh
     sudo ufw allow http
     sudo ufw allow https
-    sudo ufw allow 2142/tcp
-    sudo ufw allow 3739/tcp
-    sudo ufw allow 3525/tcp
-    sudo ufw allow 4233/tcp
-    sudo ufw allow 3747/tcp
-    sudo ufw allow 5033/tcp
-    sudo ufw allow 4262/tcp
-    sudo ufw allow 3737/tcp
-    sudo ufw allow 3556/tcp
-    sudo ufw allow 3553/tcp
-    sudo ufw allow 4633/tcp
-    sudo ufw allow 8433/tcp
-    sudo ufw allow 3555/tcp
-    sudo ufw allow 3833/tcp
-    sudo ufw allow 4533/tcp
-    sudo ufw allow 4133/tcp
-    sudo ufw allow 5339/tcp
-    sudo ufw allow 8533/tcp
     sudo ufw allow 3334/tcp
-    sudo ufw allow 4933/tcp
-    sudo ufw allow 3333/tcp
-    sudo ufw allow 6033/tcp
-    sudo ufw allow 5766/tcp
-    sudo ufw allow 3533/tcp
-    sudo ufw allow 4033/tcp
-    sudo ufw allow 3433/tcp
-    sudo ufw allow 3633/tcp
     sudo ufw --force enable    
     fi
     
@@ -175,7 +146,7 @@ default         0;
     #Generating Random Password for stratum
     blckntifypass=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1`
     cd ~
-    git clone https://github.com/tpruvot/yiimp.git
+    git clone https://github.com/lbryio/pool.git yiimp
     cd $HOME/yiimp/blocknotify
     sudo sed -i 's/tu8tu5/'$blckntifypass'/' blocknotify.cpp
     sudo make
@@ -688,12 +659,6 @@ define('"'"'EXCH_POLONIEX_SECRET'"'"', '"'"''"'"');
 define('"'"'EXCH_YOBIT_SECRET'"'"', '"'"''"'"');
 ' | sudo -E tee /etc/yiimp/keys.php >/dev/null 2>&1
  
-
-    output "Database 'yiimpfrontend' and users 'panel' and 'stratum' created with password $password and $password2, will be saved for you"
-    output ""
-    output "BTC Donation: "
-    output ""
-    
     output "Peforming the SQL import"
     output ""
     cd ~
@@ -730,7 +695,7 @@ define('"'"'YAAMP_DBNAME'"'"', '"'"'yiimpfrontend'"'"');
 define('"'"'YAAMP_DBUSER'"'"', '"'"'panel'"'"');
 define('"'"'YAAMP_DBPASSWORD'"'"', '"'"''"${password}"''"'"');
 define('"'"'YAAMP_PRODUCTION'"'"', true);
-define('"'"'YAAMP_RENTAL'"'"', true);
+define('"'"'YAAMP_RENTAL'"'"', false);
 define('"'"'YAAMP_LIMIT_ESTIMATE'"'"', false);
 define('"'"'YAAMP_FEES_MINING'"'"', 0.5);
 define('"'"'YAAMP_FEES_EXCHANGE'"'"', 2);
@@ -740,7 +705,7 @@ define('"'"'YAAMP_PAYMENTS_FREQ'"'"', 3*60*60);
 define('"'"'YAAMP_PAYMENTS_MINI'"'"', 0.001);
 define('"'"'YAAMP_ALLOW_EXCHANGE'"'"', false);
 define('"'"'YIIMP_PUBLIC_EXPLORER'"'"', true);
-define('"'"'YIIMP_PUBLIC_BENCHMARK'"'"', false);
+define('"'"'YIIMP_PUBLIC_BENCHMARK'"'"', true);
 define('"'"'YIIMP_FIAT_ALTERNATIVE'"'"', '"'"'USD'"'"'); // USD is main
 define('"'"'YAAMP_USE_NICEHASH_API'"'"', false);
 define('"'"'YAAMP_BTCADDRESS'"'"', '"'"'1BadZTUg8FZzkKKL3K1aJ69cCkLWvpiidB'"'"');
@@ -751,7 +716,7 @@ define('"'"'YAAMP_ADMIN_EMAIL'"'"', '"'"''"${EMAIL}"''"'"');
 define('"'"'YAAMP_ADMIN_IP'"'"', '"'"''"${Public}"''"'"'); // samples: "80.236.118.26,90.234.221.11" or "10.0.0.1/8"
 define('"'"'YAAMP_ADMIN_WEBCONSOLE'"'"', true);
 define('"'"'YAAMP_NOTIFY_NEW_COINS'"'"', false);
-define('"'"'YAAMP_DEFAULT_ALGO'"'"', '"'"'x11'"'"');
+define('"'"'YAAMP_DEFAULT_ALGO'"'"', '"'"'lbry'"'"');
 define('"'"'YAAMP_USE_NGINX'"'"', true);
 // Exchange public keys (private keys are in a separate config file)
 define('"'"'EXCH_CRYPTOPIA_KEY'"'"', '"'"''"'"');
@@ -806,6 +771,7 @@ screen -dmS main bash $WEB_DIR/main.sh
 screen -dmS loop2 bash $WEB_DIR/loop2.sh
 screen -dmS blocks bash $WEB_DIR/blocks.sh
 screen -dmS debug tail -f $LOG_DIR/debug.log
+screen -dmS stratum bash $STRATUM_DIR/run.sh lbry
 ' | sudo -E tee ~/screen-start.sh >/dev/null 2>&1
 sudo chmod +x ~/screen-start.sh
 
@@ -819,6 +785,42 @@ sudo sed -i 's/database = yaamp/database = yiimpfrontend/g' *.conf
 sudo sed -i 's/username = root/username = stratum/g' *.conf
 sudo sed -i 's/password = patofpaq/password = '$password2'/g' *.conf
 cd ~
+
+sudo rm -rf $HOME/yiimp
+sudo service nginx restart
+sudo service php7.0-fpm reload
+sudo add-apt-repository ppa:bitcoin/bitcoin -y
+sudo apt-get update
+sudo apt-get install unzip libdb4.8-dev libdb4.8++-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils git libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev -y
+cd ~
+wget https://github.com/lbryio/lbrycrd/releases/download/v0.12.1.0/lbrycrd-linux.zip
+sudo unzip lbrycrd-linux.zip -d /usr/bin
+
+lbrycrdd -daemon
+sleep 3
+lbrycrd-cli stop
+
+
+# Create config for Lbry
+echo && echo "Configuring Lbrycrd.conf"
+sleep 3
+rpcuser=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1`
+rpcpassword=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1`
+echo '
+rpcuser='$rpcuser'
+rpcpassword='$rpcpassword'
+rpcport=14390
+rpcthreads=24
+rpcallowip=127.0.0.1
+# onlynet=ipv4
+maxconnections=36
+daemon=1
+gen=0
+alertnotify=echo %s | mail -s "LBRY Credits alert!" ${EMAIL}
+blocknotify=blocknotify 127.0.0.1:3334 1439 %s
+' | sudo -E tee ~/.lbrycrd/lbrycrd.conf
+sleep 3
+
 
 
 output "Final Directory permissions"
@@ -842,21 +844,13 @@ sudo chmod -R 775 /var/web/serverconfig.php
 sudo chmod a+w /var/web/yaamp/runtime
 sudo chmod a+w /var/log
 sudo chmod a+w /var/web/assets
-sudo mv $HOME/yiimp/ $HOME/yiimp-install-only-do-not-run-commands-from-this-folder
-sudo service nginx restart
-sudo service php7.0-fpm reload
-sudo add-apt-repository ppa:bitcoin/bitcoin -y
-sudo apt-get update
-sudo apt-get install libdb4.8-dev libdb4.8++-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils git libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev -y
-cd ~
-git clone https://github.com/oakey22/cryptoautobuild.git autobuild
-sudo chmod +x ~/autobuild/builder.sh
+
+lbrycrdd -daemon
 
 clear
-output "Whew that was fun, just some reminders. Your mysql information is saved in ~/.my.cnf. this installer did not directly install anything required to build coins."
+output "Your mysql information is saved in ~/.my.cnf"
 output ""
-output "Please make sure to change your wallet addresses in the /var/web/serverconfig.php file."
+output "Please login to the admin panel at http://${server_name}/site/${admin_panel}"
 output ""
-output "Please make sure to add your public and private keys."
-output ""
-output "If you found this script helpful please consider donating some BTC Donation: "
+output "Your RPC username is ${rpcuser}"
+output "Your RPC Password is ${rpcpassword}"
