@@ -11,39 +11,48 @@ TO INSTALL:
 2. Create new user - sudo adduser (username)
 3. Add user to sudo group - sudo adduser (username) sudo
 4. Log in to new user - sudo su (username)
-5. wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh
-6. Follow the instructions on the screen.
+5. cd ~/
+6. wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh
+7. Follow the instructions on the screen.
+8. sudo bash screen-start.sh
 
 This will setup the pool ready for coin daemons to be added.
 
-
-Add your exchange API public and secret keys in these two separated files:
-
-	/etc/yiimp/keys.php - fixed path in code
-	web/serverconfig.php - use sample as base...
-
 You can find sample config files in web/serverconfig.sample.php and web/keys.sample.php
 
-This web application includes some command line tools, add bin/ folder to your path and type "yiimp" to list them, "yiimp checkup" can help to test your initial setup.
-Future scripts and maybe the "cron" jobs will then use this yiic console interface.
 
 You need at least three backend shells (in screen) running these scripts:
 
 	web/main.sh
 	web/loop2.sh
 	web/block.sh
+	
+This is done running the screen-start.sh script in the home folder.
 
-Start one stratum per algo using the run.sh script with the algo as parameter. For example, for x11:
+Now you will need to edit the coin in the admin panel, this will be http://IP/site/ADMIN_ADDRESS_USED_WHILE_INSTALLING then go to Coins on the headers, Find LBRY Credits and click LBC.
 
-	run.sh x11
+Here you need to do the following:
+1. Edit algo to lbry
+2. Edit image to /images/coin-LBRY.png
+3. Edit Daemon information to the following:
+3.1 process name - lbrycrdd
+3.2 Conf.folder - .lbrycrd
+3.3 RPC Host - 127.0.0.1
+3.4 RPC User - This is the Username at the end of the install script. 
+3.5 RPC Password - This is the Password at the end of the install script.
+3.6 RPC Type - POW
+4. Edit Settings and tick the following boxes:
+4.1 Enable
+4.2 Auto Ready
+4.3 Visable
+4.4 Installed
+5. Click Save
 
-Edit each .conf file with proper values.
+Once you have clicked save, you need to restart the lbry daemon in the VPS:
+1. lbrycrd-cli stop
+2. lbrycrdd -daemon
 
-Look at rc.local, it starts all three backend shells and all stratum processes. Copy it to the /etc folder so that all screen shells are started at boot up.
-
-All your coin's config files need to blocknotify their corresponding stratum using something like:
-
-	blocknotify=blocknotify yaamp.com:port coinid %s
+At the moment you will find other wallets active, you can click the install tick box on all of the ones that you are not using. I will update this at some point to remove them when installing.
 
 On the website, go to http://server.com/site/adminRights to login as admin. You have to change it to something different in the code (web/yaamp/modules/site/SiteController.php). A real admin login may be added later, but you can setup a password authentification with your web server, sample for lighttpd:
 
@@ -73,18 +82,9 @@ There are logs generated in the /var/stratum folder and /var/log/stratum/debug.l
 More instructions coming as needed.
 
 
-There a lot of unused code in the php branch. Lot come from other projects I worked on and I've been lazy to clean it up before to integrate it to yaamp. It's mostly based on the Yii framework which implements a lightweight MVC.
-
-	http://www.yiiframework.com/
-
-
 Credits:
 
 Thanks to globalzon to have released the initial Yaamp source code.
-
---
-
-You can support this project donating to tpruvot :
-
-BTC : 1Auhps1mHZQpoX4mCcVL8odU81VakZQ6dR
+Thanks to tpruvot for updating the source code to yiimp.
+Thanks to oakey22 for customising this for Lbry.
 
