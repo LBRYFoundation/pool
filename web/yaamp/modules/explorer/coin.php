@@ -68,7 +68,7 @@ for($i = $start; $i > max(1, $start-21); $i--)
 	$type = '';
 	if (arraySafeval($block,'nonce',0) > 0) $type = 'PoW';
 	else if (isset($block['auxpow'])) $type = 'Aux';
-	else if (isset($block['mint']) || arraySafeVal($block,'flags') == 'proof-of-stake') $type = 'PoS';
+	else if (isset($block['mint']) || strstr(arraySafeVal($block,'flags',''), 'proof-of-stake')) $type = 'PoS';
 
 	// nonce 256bits
 	if ($type == '' && $coin->symbol=='ZEC') $type = 'PoW';

@@ -232,10 +232,10 @@ void block_add(int userid, int workerid, int coinid, int height, double diff, do
 }
 
 // called from blocknotify tool
-void block_confirm(int coinid, const char *blockhash)
+bool block_confirm(int coinid, const char *blockhash)
 {
 	char hash[192];
-	if(strlen(blockhash) < 64) return;
+	if(strlen(blockhash) < 64) return false;
 
 	snprintf(hash, 161, "%s", blockhash);
 
@@ -261,8 +261,10 @@ void block_confirm(int coinid, const char *blockhash)
 			}
 			const char *h1 = json_get_string(json_res, "pow_hash"); // DGB, MYR, J
 			const char *h2 = json_get_string(json_res, "mined_hash"); // XVG
+			const char *h3 = json_get_string(json_res, "phash"); // XSH
 			if (h1) snprintf(hash, 161, "%s", h1);
 			else if (h2) snprintf(hash, 161, "%s", h2);
+			else if (h3) snprintf(hash, 161, "%s", h3);
 			//debuglog("%s: getblock %s -> pow %s\n", __func__, blockhash, hash);
 			json_value_free(json);
 			break;
@@ -290,17 +292,18 @@ void block_confirm(int coinid, const char *blockhash)
 	for(CLI li = g_list_block.first; li; li = li->next)
 	{
 		YAAMP_BLOCK *block = (YAAMP_BLOCK *)li->data;
-		if(block->coinid == coinid && !block->confirmed && !block->deleted)
+		if(block->coinid == coinid && !block->deleted)
 		{
 			if(strcmp(block->hash1, hash) && strcmp(block->hash2, hash)) continue;
-			debuglog("*** CONFIRMED %d : %s\n", block->height, block->hash2);
-
-			strncpy(block->hash, blockhash, 65);
-			block->confirmed = true;
-
-			return;
+			if (!block->confirmed) {
+				debuglog("*** CONFIRMED %d : %s\n", block->height, block->hash2);
+				strncpy(block->hash, blockhash, 65);
+				block->confirmed = true;
+			}
+			return true;
 		}
 	}
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

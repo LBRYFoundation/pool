@@ -9,10 +9,12 @@ function updateRawcoins()
 
 	exchange_set_default('alcurex', 'disabled', true);
 	exchange_set_default('binance', 'disabled', true);
-	exchange_set_default('bter', 'disabled', true);
 	exchange_set_default('empoex', 'disabled', true);
+	exchange_set_default('coinbene', 'disabled', true);
 	exchange_set_default('coinexchange', 'disabled', true);
 	exchange_set_default('coinsmarkets', 'disabled', true);
+	exchange_set_default('escodex', 'disabled', true);
+	exchange_set_default('gateio', 'disabled', true);
 	exchange_set_default('jubi', 'disabled', true);
 	exchange_set_default('nova', 'disabled', true);
 	exchange_set_default('stocksexchange', 'disabled', true);
@@ -22,21 +24,71 @@ function updateRawcoins()
 
 	if (!exchange_get('bittrex', 'disabled')) {
 		$list = bittrex_api_query('public/getcurrencies');
-		if(isset($list->result))
+		if(isset($list->result) && !empty($list->result))
 		{
 			dborun("UPDATE markets SET deleted=true WHERE name='bittrex'");
-			foreach($list->result as $currency)
+			foreach($list->result as $currency) {
+				if ($currency->Currency == 'BTC') {
+					exchange_set('bittrex', 'withdraw_fee_btc', $currency->TxFee);
+					continue;
+				}
 				updateRawCoin('bittrex', $currency->Currency, $currency->CurrencyLong);
+			}
+		}
+	}
+
+	if (!exchange_get('bitz', 'disabled')) {
+		$list = bitz_api_query('tickerall');
+		if (!empty($list)) {
+			dborun("UPDATE markets SET deleted=true WHERE name='bitz'");
+			foreach($list as $c => $ticker) {
+				$e = explode('_', $c);
+				if (strtoupper($e[1]) !== 'BTC')
+					continue;
+				$symbol = strtoupper($e[0]);
+				updateRawCoin('bitz', $symbol);
+			}
 		}
 	}
 
 	if (!exchange_get('bleutrade', 'disabled')) {
 		$list = bleutrade_api_query('public/getcurrencies');
-		if(isset($list->result))
+		if(isset($list->result) && !empty($list->result))
 		{
 			dborun("UPDATE markets SET deleted=true WHERE name='bleutrade'");
-			foreach($list->result as $currency)
+			foreach($list->result as $currency) {
+				if ($currency->Currency == 'BTC') {
+					exchange_set('bleutrade', 'withdraw_fee_btc', $currency->TxFee);
+					continue;
+				}
 				updateRawCoin('bleutrade', $currency->Currency, $currency->CurrencyLong);
+			}
+		}
+	}
+
+	if (!exchange_get('coinbene', 'disabled')) {
+		$data = coinbene_api_query('market/symbol');
+		$list = objSafeVal($data, 'symbol');
+		if(is_array($list) && !empty($list)) {
+			dborun("UPDATE markets SET deleted=true WHERE name='coinbene'");
+			foreach($list as $ticker) {
+				if ($ticker->quoteAsset != 'BTC') continue;
+				$symbol = $ticker->baseAsset;
+				updateRawCoin('coinbene', $symbol);
+			}
+		}
+	}
+
+	if (!exchange_get('crex24', 'disabled')) {
+		$list = crex24_api_query('currencies');
+		if(is_array($list) && !empty($list)) {
+			dborun("UPDATE markets SET deleted=true WHERE name='crex24'");
+			foreach ($list as $currency) {
+				$symbol = objSafeVal($currency, 'symbol');
+				$name = objSafeVal($currency, 'name');
+				if ($currency->isFiat || $currency->isDelisted) continue;
+				updateRawCoin('crex24', $symbol, $name);
+			}
 		}
 	}
 
@@ -70,26 +122,6 @@ function updateRawcoins()
 				$symbol = strtoupper($e[0]);
 
 				updateRawCoin('c-cex', $symbol, arraySafeVal($names, $e[0], 'unknown'));
-			}
-		}
-	}
-
-	if (!exchange_get('bter', 'disabled')) {
-		$list = bter_api_query('marketlist');
-		if(is_object($list) && is_array($list->data))
-		{
-			dborun("UPDATE markets SET deleted=true WHERE name='bter'");
-			foreach($list->data as $item) {
-				if (strtoupper($item->curr_b) !== 'BTC')
-					continue;
-				if (strpos($item->name, 'Asset') !== false)
-					continue;
-				if (strpos($item->name, 'BitShares') !== false && $item->symbol != 'BTS')
-					continue;
-				// ignore some dead coins and assets
-				if (in_array($item->symbol, array('BITGLD','DICE','ROX','TOKEN')))
-					continue;
-				updateRawCoin('bter', $item->symbol, $item->name);
 			}
 		}
 	}
@@ -148,6 +180,36 @@ function updateRawcoins()
 					continue;
 				$symbol = strtoupper($e[0]);
 				updateRawCoin('cryptopia', $symbol);
+			}
+		}
+	}
+
+	if (!exchange_get('cryptobridge', 'disabled')) {
+		$list = cryptobridge_api_query('ticker');
+		if(is_array($list) && !empty($list))
+		{
+			dborun("UPDATE markets SET deleted=true WHERE name='cryptobridge'");
+			foreach($list as $ticker) {
+				$e = explode('_', $ticker->id);
+				if (strtoupper($e[1]) !== 'BTC')
+					continue;
+				$symbol = strtoupper($e[0]);
+				updateRawCoin('cryptobridge', $symbol);
+			}
+		}
+	}
+
+	if (!exchange_get('escodex', 'disabled')) {
+		$list = escodex_api_query('ticker');
+		if(is_array($list) && !empty($list))
+		{
+			dborun("UPDATE markets SET deleted=true WHERE name='escodex'");
+			foreach($list as $ticker) {
+				#debuglog (json_encode($ticker));
+				if (strtoupper($ticker->base) !== 'BTC')
+					continue;
+				$symbol = strtoupper($ticker->quote);
+				updateRawCoin('escodex', $symbol);
 			}
 		}
 	}
@@ -211,6 +273,22 @@ function updateRawcoins()
 		}
 	}
 
+	if (!exchange_get('gateio', 'disabled')) {
+		$json = gateio_api_query('marketlist');
+		$list = arraySafeVal($json,'data');
+		if(!empty($list))
+		{
+			dborun("UPDATE markets SET deleted=true WHERE name='gateio'");
+			foreach($list as $item) {
+				if ($item['curr_b'] != 'BTC')
+					continue;
+				$symbol = trim(strtoupper($item['symbol']));
+				$name = trim($item['name']);
+				updateRawCoin('gateio', $symbol, $name);
+			}
+		}
+	}
+
 	if (!exchange_get('nova', 'disabled')) {
 		$list = nova_api_query('markets');
 		if(is_object($list) && !empty($list->markets))
@@ -255,6 +333,19 @@ function updateRawcoins()
 					continue;
 				$symbol = strtoupper($e[0]);
 				updateRawCoin('empoex', $symbol);
+			}
+		}
+	}
+
+	if (!exchange_get('kucoin', 'disabled')) {
+		$list = kucoin_api_query('currencies');
+		if(kucoin_result_valid($list) && !empty($list->data))
+		{
+			dborun("UPDATE markets SET deleted=true WHERE name='kucoin'");
+			foreach($list->data as $item) {
+				$symbol = $item->name;
+				$name = $item->fullName;
+				updateRawCoin('kucoin', $symbol, $name);
 			}
 		}
 	}
@@ -343,7 +434,7 @@ function updateRawCoin($marketname, $symbol, $name='unknown')
 	if($symbol == 'BTC') return;
 
 	$coin = getdbosql('db_coins', "symbol=:symbol", array(':symbol'=>$symbol));
-	if(!$coin && $marketname != 'yobit')
+	if(!$coin && YAAMP_CREATE_NEW_COINS)
 	{
 		$algo = '';
 		if ($marketname == 'cryptopia') {
@@ -361,10 +452,14 @@ function updateRawCoin($marketname, $symbol, $name='unknown')
 			}
 		}
 
-		if (in_array($marketname, array('nova','askcoin','binance','coinexchange','coinsmarkets','hitbtc'))) {
+		if (in_array($marketname, array('nova','askcoin','binance','bitz','coinexchange','coinsmarkets','cryptobridge','hitbtc'))) {
 			// don't polute too much the db with new coins, its better from exchanges with labels
 			return;
 		}
+
+		// some other to ignore...
+		if (in_array($marketname, array('crex24','escodex','yobit','coinbene','kucoin','tradesatoshi')))
+			return;
 
 		if (market_get($marketname, $symbol, "disabled")) {
 			return;

@@ -144,14 +144,12 @@ foreach ($db_rows as $row) {
 	echo '<td class="algo">'.CHtml::link($row['algo'],'/bench?algo='.$row['algo']).'</td>';
 	echo '<td data="'.$row['time'].'">'.$age.'</td>';
 	echo '<td>'.($row['idchip'] ? CHtml::link($row['chip'],'/bench?chip='.$row['idchip']) : $row['chip']).'</td>';
-	if ($row['type'] == 'cpu') {
-		echo '<td>'.formatCPU($row).'</td>';
-		echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
-		echo '<td>'.$row['arch'].'</td>';
-	} else {
-		echo '<td>'.$row['device'].getProductIdSuffix($row).'</td>';
-		echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
+	echo '<td>'.formatDevice($row).'</td>';
+	echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
+	if ($row['type'] == 'gpu') {
 		echo '<td>'.formatCudaArch($row['arch']).'</td>';
+	} else {
+		echo '<td>'.$row['arch'].'</td>';
 	}
 
 	echo '<td data="'.$row['khps'].'">'.$hashrate.'</td>';

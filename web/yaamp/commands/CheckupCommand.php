@@ -186,8 +186,15 @@ class CheckupCommand extends CConsoleCommand
 			$nbUpdated = 0; $nbDropped = 0;
 			foreach ($coins->findAll() as $coin) {
 				if (!empty($coin->image)) {
-					if (file_exists($this->basePath.$coin->image))
+					if (file_exists($this->basePath.$coin->image)) {
+						$data = file_get_contents($this->basePath.$coin->image);
+						if (strstr($data, "<script") || strstr($data, "<html")) {
+							unlink($this->basePath.$coin->image);
+							$coin->image = NULL;
+							$nbDropped += $coin->save();
+						}
 						continue;
+					}
 					if (file_exists($this->basePath."/images/coin-$coin->symbol.png")) {
 						$coin->image = "/images/coin-$coin->symbol.png";
 						$nbUpdated += $coin->save();

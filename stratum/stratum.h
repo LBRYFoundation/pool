@@ -1,4 +1,3 @@
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -19,6 +18,7 @@
 #include <mysql.h>
 #include <errmsg.h>
 #include <ifaddrs.h>
+#include <dirent.h>
 
 #include <iostream>
 #include <vector>
@@ -74,18 +74,32 @@ extern char g_sql_host[1024];
 extern char g_sql_database[1024];
 extern char g_sql_username[1024];
 extern char g_sql_password[1024];
+extern int g_sql_port;
 
 extern char g_stratum_coin_include[256];
 extern char g_stratum_coin_exclude[256];
 
 extern char g_stratum_algo[256];
 extern double g_stratum_difficulty;
+extern double g_stratum_min_diff;
+extern double g_stratum_max_diff;
 
 extern int g_stratum_max_cons;
 extern int g_stratum_max_ttf;
 extern bool g_stratum_reconnect;
 extern bool g_stratum_renting;
 extern bool g_stratum_segwit;
+extern int g_limit_txs_per_block;
+
+extern bool g_handle_haproxy_ips;
+extern int g_socket_recv_timeout;
+
+extern bool g_debuglog_client;
+extern bool g_debuglog_hash;
+extern bool g_debuglog_socket;
+extern bool g_debuglog_rpc;
+extern bool g_debuglog_list;
+extern bool g_debuglog_remote;
 
 extern uint64_t g_max_shares;
 extern uint64_t g_shares_counter;
@@ -133,13 +147,19 @@ void scrypt_N_R_1_256(const char* input, char* output, uint32_t N, uint32_t R, u
 void sha256_hash_hex(const char *input, char *output, unsigned int len);
 void sha256_double_hash_hex(const char *input, char *output, unsigned int len);
 
+#include "algos/a5a.h"
 #include "algos/c11.h"
 #include "algos/x11.h"
 #include "algos/x11evo.h"
+#include "algos/x12.h"
 #include "algos/x13.h"
 #include "algos/x14.h"
 #include "algos/x15.h"
+#include "algos/x16r.h"
+#include "algos/x16rv2.h"
+#include "algos/x16s.h"
 #include "algos/x17.h"
+#include "algos/x22i.h"
 #include "algos/xevan.h"
 #include "algos/hmq17.h"
 #include "algos/nist5.h"
@@ -147,18 +167,23 @@ void sha256_double_hash_hex(const char *input, char *output, unsigned int len);
 #include "algos/hsr14.h"
 #include "algos/quark.h"
 #include "algos/neoscrypt.h"
+#include "algos/allium.h"
 #include "algos/lyra2re.h"
 #include "algos/lyra2v2.h"
+#include "algos/lyra2v3.h"
 #include "algos/lyra2z.h"
+#include "algos/lyra2zz.h"
 #include "algos/blake.h"
 #include "algos/blakecoin.h"
-#include "algos/blake2.h"
+#include "algos/blake2b.h"
+#include "algos/blake2s.h"
 #include "algos/qubit.h"
 #include "algos/groestl.h"
 #include "algos/jha.h"
 #include "algos/skein.h"
 #include "algos/keccak.h"
 #include "algos/sha256t.h"
+#include "algos/sha256q.h"
 #include "algos/skunk.h"
 #include "algos/timetravel.h"
 #include "algos/bitcore.h"
@@ -166,9 +191,11 @@ void sha256_double_hash_hex(const char *input, char *output, unsigned int len);
 #include "algos/bastion.h"
 #include "algos/bmw.h"
 #include "algos/deep.h"
+#include "algos/lbk3.h"
 #include "algos/lbry.h"
 #include "algos/luffa.h"
 #include "algos/pentablake.h"
+#include "algos/rainforest.h"
 #include "algos/whirlpool.h"
 #include "algos/whirlpoolx.h"
 #include "algos/skein2.h"
@@ -178,9 +205,15 @@ void sha256_double_hash_hex(const char *input, char *output, unsigned int len);
 #include "algos/sib.h"
 #include "algos/m7m.h"
 #include "algos/phi.h"
+#include "algos/phi2.h"
 #include "algos/polytimos.h"
+#include "algos/sonoa.h"
 #include "algos/tribus.h"
 #include "algos/veltor.h"
 #include "algos/velvet.h"
 #include "algos/argon2a.h"
-
+#include "algos/vitalium.h"
+#include "algos/aergo.h"
+#include "algos/hex.h"
+#include "algos/argon2d-dyn.h"
+#include "algos/exosis.h"

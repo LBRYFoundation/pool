@@ -1,5 +1,7 @@
 *.o
 *.a
+.deps
+.dirstamp
 stratum/stratum
 stratum/blocknotify
 blocknotify/blocknotify
@@ -18,3 +20,6 @@ web/serverconfig.php
 web/assets/
 *.rej
 *.orig
+.idea/*
+web/yaamp/.idea/
+*.0

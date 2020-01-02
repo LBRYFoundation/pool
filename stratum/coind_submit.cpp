@@ -140,6 +140,9 @@ bool coind_submitgetauxblock(YAAMP_COIND *coind, const char *hash, const char *b
 
 	json_value *json_result = json_get_object(json, "result");
 	bool b = json_result && json_result->type == json_boolean && json_result->u.boolean;
+	// some auxpow coins return error:null, result: null on success
+	if(!b)
+		b=json_result && json_result->type == json_null;
 
 	json_value_free(json);
 	return b;

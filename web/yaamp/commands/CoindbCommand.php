@@ -50,12 +50,12 @@ class CoindbCommand extends CConsoleCommand
 
 		} elseif ($args[0] == 'icons') {
 
-			$nbUpdated  = $this->grabBterIcons();
-			$nbUpdated += $this->grabCcexIcons();
+			$nbUpdated  = $this->grabCcexIcons();
 			$nbUpdated += $this->grabCryptopiaIcons();
 			$nbUpdated += $this->grabBittrexIcons(); // can be huge ones
 			$nbUpdated += $this->grabCoinExchangeIcons();
 			$nbUpdated += $this->grabAlcurexIcons();
+			$nbUpdated += $this->grabKuCoinIcons();
 			$nbUpdated += $this->grabNovaIcons();
 
 			echo "total updated: $nbUpdated\n";
@@ -295,41 +295,6 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
-	 * Icon grabber - Bter
-	 */
-	public function grabBterIcons()
-	{
-		$url = 'http://bter.com/images/coin_icon/64/';
-		$nbUpdated = 0;
-		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id WHERE M.name='bter' AND IFNULL(coins.image,'') = ''";
-		$coins = dbolist($sql);
-		if (empty($coins))
-			return 0;
-		echo "bter: try to download new icons...\n";
-		foreach ($coins as $coin) {
-			$coin = getdbo('db_coins', $coin["id"]);
-			$symbol = $coin->symbol;
-			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
-			$local = $this->basePath."/images/coin-{$symbol}.png";
-			try {
-				$data = @ file_get_contents($url.strtolower($symbol).'.png');
-			} catch (Exception $e) {
-				continue;
-			}
-			if (strlen($data) < 2048) continue;
-			echo $coin->symbol." icon found\n";
-			file_put_contents($local, $data);
-			if (filesize($local) > 0) {
-				$coin->image = "/images/coin-{$symbol}.png";
-				$nbUpdated += $coin->save();
-			}
-		}
-		if ($nbUpdated)
-			echo "$nbUpdated icons downloaded from bter\n";
-		return $nbUpdated;
-	}
-
-	/**
 	 * Icon grabber - Bittrex
 	 */
 	public function grabBittrexIcons()
@@ -440,7 +405,7 @@ class CoindbCommand extends CConsoleCommand
 			} catch (Exception $e) {
 				continue;
 			}
-			if (strlen($data) < 2048) continue;
+			if (strlen($data) < 3000 || strstr($data, '<script') || strstr($data,'<html')) continue;
 			echo $symbol." icon found\n";
 			file_put_contents($local, $data);
 			if (filesize($local) > 0) {
@@ -504,8 +469,7 @@ class CoindbCommand extends CConsoleCommand
 		echo "alcurex: try to download new icons...\n";
 		foreach ($coins as $coin) {
 			$coin = getdbo('db_coins', $coin["id"]);
-			$symbol = $coin->symbol;
-			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
+			$symbol = $coin->getOfficialSymbol();
 			$local = $this->basePath."/images/coin-{$symbol}.png";
 			try {
 				$data = @ file_get_contents($url.strtoupper($symbol).'.png');
@@ -526,6 +490,41 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
+	 * Icon grabber - KuCoin
+	 */
+	public function grabKuCoinIcons()
+	{
+		$url = 'https://assets.kucoin.com/www/coin/pc/';//GRIN.png
+		$nbUpdated = 0;
+		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id ".
+			"WHERE M.name='kucoin' AND IFNULL(coins.image,'') = ''";
+		$coins = dbolist($sql);
+		if (empty($coins))
+			return 0;
+		echo "kucoin: try to download new icons...\n";
+		foreach ($coins as $coin) {
+			$coin = getdbo('db_coins', $coin["id"]);
+			$symbol = $coin->getOfficialSymbol();
+			$local = $this->basePath."/images/coin-{$symbol}.png";
+			try {
+				$data = @ file_get_contents($url.$symbol.'.png');
+			} catch (Exception $e) {
+				continue;
+			}
+			if (strlen($data) < 2048) continue;
+			echo $symbol." icon found\n";
+			file_put_contents($local, $data);
+			if (filesize($local) > 0) {
+				$coin->image = "/images/coin-{$symbol}.png";
+				$nbUpdated += $coin->save();
+			}
+		}
+		if ($nbUpdated)
+			echo "$nbUpdated icons downloaded from kucoin\n";
+		return $nbUpdated;
+	}
+
+	/**
 	 * Icon grabber - NovaExchange
 	 */
 	public function grabNovaIcons()
@@ -540,8 +539,7 @@ class CoindbCommand extends CConsoleCommand
 		echo "nova: try to download new icons...\n";
 		foreach ($coins as $coin) {
 			$coin = getdbo('db_coins', $coin["id"]);
-			$symbol = $coin->symbol;
-			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
+			$symbol = $coin->getOfficialSymbol();
 			$local = $this->basePath."/images/coin-{$symbol}.png";
 			try {
 				$data = @ file_get_contents($url.strtolower($symbol).'.png');

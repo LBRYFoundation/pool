@@ -16,14 +16,22 @@ static void job_mining_notify_buffer(YAAMP_JOB *job, char *buffer)
 {
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 
-	if (!strcmp(g_current_algo->name, "lbry")) {
+	if (!strcmp(g_stratum_algo, "lbry")) {
 		sprintf(buffer, "{\"id\":null,\"method\":\"mining.notify\",\"params\":["
 			"\"%x\",\"%s\",\"%s\",\"%s\",\"%s\",[%s],\"%s\",\"%s\",\"%s\",true]}\n",
 			job->id, templ->prevhash_be, templ->claim_be, templ->coinb1, templ->coinb2,
 			templ->txmerkles, templ->version, templ->nbits, templ->ntime);
 		return;
+	} else if (strlen(templ->extradata_hex) == 128) {
+		// LUX smart contract state hashes (like lbry extra field, here the 2 root hashes in one)
+		sprintf(buffer, "{\"id\":null,\"method\":\"mining.notify\",\"params\":["
+			"\"%x\",\"%s\",\"%s\",\"%s\",\"%s\",[%s],\"%s\",\"%s\",\"%s\",true]}\n",
+			job->id, templ->prevhash_be, templ->extradata_be, templ->coinb1, templ->coinb2,
+			templ->txmerkles, templ->version, templ->nbits, templ->ntime);
+		return;
 	}
 
+	// standard stratum
 	sprintf(buffer, "{\"id\":null,\"method\":\"mining.notify\",\"params\":[\"%x\",\"%s\",\"%s\",\"%s\",[%s],\"%s\",\"%s\",\"%s\",true]}\n",
 		job->id, templ->prevhash_be, templ->coinb1, templ->coinb2, templ->txmerkles, templ->version, templ->nbits, templ->ntime);
 }
@@ -107,6 +115,7 @@ void job_broadcast(YAAMP_JOB *job)
 	{
 		YAAMP_CLIENT *client = (YAAMP_CLIENT *)li->data;
 		if(client->deleted) continue;
+		if(!client->sock) continue;
 	//	if(client->reconnecting && client->locked) continue;
 
 		if(client->jobid_next != job->id) continue;

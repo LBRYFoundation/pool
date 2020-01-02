@@ -10,6 +10,9 @@ JavascriptFile("/extensions/jqplot/plugins/jqplot.highlighter.js");
 $height = '240px';
 
 $wallet = user()->getState('yaamp-wallet');
+if (!empty($wallet) && preg_match('/[^A-Za-z0-9]/', $wallet)) {
+	die;
+}
 $user = getuserparam($wallet);
 
 $algo_unit = 'Mh';

@@ -17,10 +17,24 @@ function BenchUpdateChips()
 	// bug in nvml 378.x and 381.x (linux + win) fixed in 382.05
 	dborun("UPDATE benchmarks SET realfreq=NULL WHERE realfreq<=200 AND driver LIKE '% 378.%'");
 	dborun("UPDATE benchmarks SET realfreq=NULL WHERE realfreq<=200 AND driver LIKE '% 381.%'");
+	// sanity check on long fields (no html wanted)
+	dborun("DELETE FROM benchmarks WHERE device LIKE '%<%' OR client LIKE '%<%'");
 
 	$benchs = getdbolist('db_benchmarks', "IFNULL(chip,'')=''");
 	foreach ($benchs as $bench) {
 		if (empty($bench->vendorid) || empty($bench->device)) continue;
+
+		if ($bench->algo == 'x16r') { // not constant, inaccurate
+			$bench->delete();
+			continue;
+		}
+
+		$rawdata = json_encode($bench->attributes);
+		if (strpos($rawdata,"script")) {
+			debuglog("bench record deleted : $rawdata");
+			$bench->delete();
+			continue;
+		}
 
 		$dups = getdbocount('db_benchmarks', "vendorid=:vid AND client=:client AND os=:os AND driver=:drv AND throughput=:thr AND userid=:uid",
 			array(':vid'=>$bench->vendorid, ':client'=>$bench->client, ':os'=>$bench->os, ':drv'=>$bench->driver,':thr'=>$bench->throughput,':uid'=>$bench->userid)
@@ -45,6 +59,10 @@ function BenchUpdateChips()
 			} elseif ($cnt > 5 && $bench->khps < $avg / 2) {
 				$user = getdbo('db_accounts', $bench->userid);
 				debuglog("bench: {$bench->device} ignored, bad {$bench->algo} hashrate {$bench->khps} kHs by {$user->username}");
+				$bench->delete();
+				continue;
+			}
+			if ($bench->chip == 'GPU' || $bench->chip == 'Graphics Device') {
 				$bench->delete();
 				continue;
 			}

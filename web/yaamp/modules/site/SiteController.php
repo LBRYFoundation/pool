@@ -415,7 +415,7 @@ class SiteController extends CommonController
 		$algo = user()->getState('yaamp-algo');
 		$memcache = controller()->memcache->memcache;
 		$memkey = $algo.'_'.str_replace('/','_',$partial);
-		$html = memcache_get($memcache, $memkey);
+		$html = controller()->memcache->get($memkey);
 
 		if (!empty($html)) {
 			echo $html;
@@ -428,7 +428,7 @@ class SiteController extends CommonController
 		$html = ob_get_clean();
 		echo $html;
 
-		memcache_set($memcache, $memkey, $html, MEMCACHE_COMPRESSED, $cachetime);
+		controller()->memcache->set($memkey, $html, $cachetime, MEMCACHE_COMPRESSED);
 	}
 
 	// Pool Status : public right panel with all algos and live stats
@@ -1077,7 +1077,7 @@ class SiteController extends CommonController
 		$this->goback();
 	}
 
-    public function actionCancelorder()
+	public function actionCancelorder()
 	{
 		if(!$this->admin) return;
 		$order = getdbo('db_orders', getiparam('id'));
@@ -1091,7 +1091,7 @@ class SiteController extends CommonController
 
 	public function actionAlgo()
 	{
-		$algo = substr(getparam('algo'), 0, 32);
+		$algo = getalgoparam();
 		$a = getdbosql('db_algos', "name=:name", array(':name'=>$algo));
 
 		if($a)
@@ -1108,7 +1108,7 @@ class SiteController extends CommonController
 
 	public function actionGomining()
 	{
-		$algo = substr(getparam('algo'), 0, 32);
+		$algo = getalgoparam();
 		if ($algo == 'all') {
 			return;
 		}

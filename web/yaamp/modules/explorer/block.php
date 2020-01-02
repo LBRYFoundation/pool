@@ -144,6 +144,12 @@ echo '<tr><td>Size:</td><td>'.$block['size'].' bytes</td></tr>';
 if(isset($block['flags']))
 	echo '<tr><td>Flags:</td><td><span class="monospace">'.$block['flags'].'</span></td></tr>';
 
+if(isset($block['previousblockhash']) && $coin->algo == 'x16r') {
+	echo '<tr><td>Hash order:</td><td><span class="monospace">'.
+		substr($block['previousblockhash'], -16).
+	'</span></td></tr>';
+}
+
 if(isset($block['previousblockhash']))
 	echo '<tr><td>Previous Hash:</td><td><span class="monospace">'.
 		$coin->createExplorerLink($block['previousblockhash'], array('hash'=>$block['previousblockhash'])).
@@ -219,6 +225,9 @@ foreach($block['tx'] as $txhash)
 	echo "</td>";
 
 	echo "<td>";
+	$nvout = count($tx['vout']);;
+	if ($nvout > 500) echo "Too much addresses to display ($nvout)";
+	else
 	foreach($tx['vout'] as $vout)
 	{
 		$value = $vout['value'];
@@ -235,7 +244,7 @@ foreach($block['tx'] as $txhash)
 
 	echo '</tr><tr class="raw" style="display:none;"><td colspan="6"><div class="json">';
 	unset($tx['hex']);
-	echo colorizeJson(json_encode($tx, 128));
+	echo ($nvout > 500) ? 'truncated' : colorizeJson(json_encode($tx, 128));
 	echo '</div></td>';
 
 	echo "</tr>";

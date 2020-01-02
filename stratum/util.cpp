@@ -149,7 +149,11 @@ void clientlog(YAAMP_CLIENT *client, const char *format, ...)
 	if(g_clientlog)
 	{
 		fprintf(g_clientlog, "%s", buffer3);
-		fflush(g_clientlog);
+		if (fflush(g_clientlog) == EOF) {
+			// reopen if wiped
+			fclose(g_clientlog);
+			g_clientlog = fopen("client.log", "a");
+		}
 	}
 }
 
@@ -219,7 +223,10 @@ void stratumlog(const char *format, ...)
 	if(g_stratumlog)
 	{
 		fprintf(g_stratumlog, "%s: %s", buffer2, buffer);
-		fflush(g_stratumlog);
+		if (fflush(g_stratumlog) == EOF) {
+			fclose(g_stratumlog);
+			g_stratumlog = fopen("stratum.log", "a");
+		}
 	}
 }
 
@@ -264,7 +271,10 @@ void rejectlog(const char *format, ...)
 	if(g_rejectlog)
 	{
 		fprintf(g_rejectlog, "%s: %s", buffer2, buffer);
-		fflush(g_rejectlog);
+		if (fflush(g_rejectlog) == EOF) {
+			fclose(g_rejectlog);
+			g_rejectlog = fopen("reject.log", "a");
+		}
 	}
 }
 
@@ -405,6 +415,14 @@ void hexlify(char *hex, const unsigned char *bin, int len)
 	hex[0] = 0;
 	for(int i=0; i < len; i++)
 		sprintf(hex+strlen(hex), "%02x", bin[i]);
+}
+
+bool ishexa(char *hex, int len)
+{
+	for(int i=0; i<len; i++) {
+		if (!isxdigit(hex[i])) return false;
+	}
+	return true;
 }
 
 unsigned char binvalue(const char v)
@@ -662,6 +680,29 @@ long long current_timestamp_dms() // allow 0.1 ms time
 
 	dms = 10000LL*te.tv_sec + round(te.tv_nsec/1e5);
 	return dms;
+}
+
+int opened_files()
+{
+	int fds = 0;
+	DIR *d = opendir("/proc/self/fd");
+	if (d) {
+		while (readdir(d)) fds++;
+		closedir(d);
+	}
+	return fds;
+}
+
+int resident_size()
+{
+	int sz, res = 0;
+	FILE *fp = fopen("/proc/self/statm", "r");
+	if (fp) {
+		int p = fscanf(fp, "%d", &sz);
+		if (p) p += fscanf(fp, "%d", &res);
+		fclose(fp);
+	}
+	return res;
 }
 
 void string_lower(char *s)
