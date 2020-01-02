@@ -98,6 +98,16 @@ function BackendBlockFind1($coinid = NULL)
 		}
 		if(!$coin->enable) continue;
 		if($coin->rpcencoding == 'DCR' && !$coin->auto_ready) continue;
+			
+		$dblock = getdbosql('db_blocks', "coin_id=:coinid AND blockhash=:hash AND height=:height AND id!=:blockid",
+			array(':coinid'=>$coin->id, ':hash'=>$db_block->blockhash, ':height'=>$db_block->height, ':blockid'=>$db_block->id)
+		);
+		
+		if($dblock) {
+			debuglog("warning: Doubled {$coin->symbol} block found for block height {$db_block->height}!");
+			$db_block->delete();
+			continue;
+		}
 
 		$db_block->category = 'orphan';
 		$remote = new WalletRPC($coin);
@@ -177,6 +187,10 @@ function BackendBlocksUpdate($coinid = NULL)
 		if(!$block->coin_id || !$coin) {
 			debuglog("warning: bad coin id {$block->coin_id} for block id {$block->id}!");
 			$block->delete();
+			continue;
+		}
+
+		if (!$coin->auto_ready || ($coin->target_height && $coin->target_height > $coin->block_height)) {
 			continue;
 		}
 
@@ -271,6 +285,7 @@ function BackendBlocksUpdate($coinid = NULL)
 
 			// auto update mature_blocks
 			if ($block->confirmations > 0 && $block->confirmations < $coin->mature_blocks || empty($coin->mature_blocks)) {
+				$coin = getdbo('db_coins', $block->coin_id); // refresh coin data
 				debuglog("{$coin->symbol} mature_blocks updated to {$block->confirmations}");
 				$coin->mature_blocks = $block->confirmations;
 				$coin->save();
@@ -285,7 +300,7 @@ function BackendBlocksUpdate($coinid = NULL)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
-// Search new block transactions
+// Search new block transactions (main thread)
 
 function BackendBlockFind2($coinid = NULL)
 {
@@ -299,23 +314,20 @@ function BackendBlockFind2($coinid = NULL)
 		if($coin->symbol == 'BTC') continue;
 		$remote = new WalletRPC($coin);
 
+		$timerpc = microtime(true);
 		$mostrecent = 0;
 		if(empty($coin->lastblock)) $coin->lastblock = '';
 		$list = $remote->listsinceblock($coin->lastblock);
+		$rpcdelay = microtime(true) - $timerpc;
+		if ($rpcdelay > 0.5)
+			screenlog(__FUNCTION__.": {$coin->symbol} listsinceblock took ".round($rpcdelay,3)." sec, ".
+				(is_array($list) ? count($list) : 0). "txs");
 		if(!$list) continue;
 
-//		debuglog("find2 $coin->symbol");
 		foreach($list['transactions'] as $transaction)
 		{
 			if(!isset($transaction['blockhash'])) continue;
 			if($transaction['time'] > time() - 5*60) continue;
-
-			if($transaction['time'] > $mostrecent)
-			{
-				$coin->lastblock = $transaction['blockhash'];
-				$mostrecent = $transaction['time'];
-			}
-
 			if($transaction['time'] < time() - 60*60) continue;
 			if($transaction['category'] != 'generate' && $transaction['category'] != 'immature') continue;
 
@@ -329,6 +341,13 @@ function BackendBlockFind2($coinid = NULL)
 
 			if ($coin->rpcencoding == 'DCR')
 				debuglog("{$coin->name} generated block {$blockext['height']} detected!");
+
+			if($transaction['time'] > $mostrecent) {
+				$coin = getdbo('db_coins', $coin->id); // refresh coin data
+				$coin->lastblock = $transaction['blockhash'];
+				$coin->save();
+				$mostrecent = $transaction['time'];
+			}
 
 			$db_block = new db_blocks;
 			$db_block->blockhash = $transaction['blockhash'];
@@ -357,6 +376,7 @@ function BackendBlockFind2($coinid = NULL)
 				}
 
 				if (!$coin->hasmasternodes) {
+					$coin = getdbo('db_coins', $coin->id); // refresh coin data
 					$coin->hasmasternodes = true;
 					$coin->save();
 				}
@@ -370,14 +390,12 @@ function BackendBlockFind2($coinid = NULL)
 				debuglog(__FUNCTION__.": unable to insert block!");
 
 			BackendBlockNew($coin, $db_block);
-		}
-
-		$coin->save();
+		} // tx
 	}
 
 	$d1 = microtime(true) - $t1;
 	controller()->memcache->add_monitoring_function(__FUNCTION__, $d1);
-	//debuglog(__FUNCTION__." took ".round($d1,3)." sec");
+	if ($d1 > 3.0) screenlog(__FUNCTION__.": took ".round($d1,3)." sec");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////

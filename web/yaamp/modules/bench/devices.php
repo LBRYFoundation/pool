@@ -105,11 +105,7 @@ foreach ($in_db as $row) {
 		$chip = CHtml::link($chip, '/bench?chip='.$row['idchip'].'&algo=all');
 	}
 	echo '<td>'.$chip.'</td>';
-
-	if ($row['type'] == 'gpu')
-		echo '<td>'.$row['device'].getProductIdSuffix($row).'</td>';
-	else
-		echo '<td>'.formatCPU($row).'</td>';
+	echo '<td>'.formatDevice($row).'</td>';
 
 	if (substr($vendorid,0,4) == '10de')
 		echo '<td><span class="generic" title="nVidia product id">'.$vendorid.'</span></td>';

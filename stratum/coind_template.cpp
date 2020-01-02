@@ -68,17 +68,17 @@ YAAMP_JOB_TEMPLATE *coind_create_template_memorypool(YAAMP_COIND *coind)
 
 	json_value_free(json);
 
-	json = rpc_call(&coind->rpc, "getinfo", "[]");
+	json = rpc_call(&coind->rpc, "getmininginfo", "[]");
 	if(!json || json->type == json_null)
 	{
-		coind_error(coind, "coind_getinfo");
+		coind_error(coind, "coind getmininginfo");
 		return NULL;
 	}
 
 	json_result = json_get_object(json, "result");
 	if(!json_result || json_result->type == json_null)
 	{
-		coind_error(coind, "coind_getinfo");
+		coind_error(coind, "coind getmininginfo");
 		json_value_free(json);
 
 		return NULL;
@@ -333,6 +333,18 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		}
 	}
 
+	const char *sc_root = json_get_string(json_result, "stateroot");
+	const char *sc_utxo = json_get_string(json_result, "utxoroot");
+	if (sc_root && sc_utxo) {
+		// LUX Smart Contracts, 144-bytes block headers
+		strcpy(&templ->extradata_hex[ 0], sc_root); // 32-bytes hash (64 in hexa)
+		strcpy(&templ->extradata_hex[64], sc_utxo); // 32-bytes hash too
+
+		// same weird byte order as previousblockhash field
+		ser_string_be2(sc_root, &templ->extradata_be[ 0], 8);
+		ser_string_be2(sc_utxo, &templ->extradata_be[64], 8);
+	}
+
 	if (strcmp(coind->rpcencoding, "DCR") == 0) {
 		decred_fix_template(coind, templ, json_result);
 	}
@@ -381,12 +393,20 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	txids.push_back("");
 
 	templ->has_segwit_txs = false;
-	// to force/test
-	// templ->has_segwit_txs = coind->usesegwit = (coind->usesegwit || g_stratum_segwit);
+
+	templ->has_filtered_txs = false;
+	templ->filtered_txs_fee = 0;
+
 	for(int i = 0; i < json_tx->u.array.length; i++)
 	{
 		const char *p = json_get_string(json_tx->u.array.values[i], "hash");
 		char hash_be[256] = { 0 };
+
+		if (templ->has_filtered_txs) {
+			templ->filtered_txs_fee += json_get_int(json_tx->u.array.values[i], "fee");
+			continue;
+		}
+
 		string_be(p, hash_be);
 		txhashes.push_back(hash_be);
 
@@ -396,7 +416,6 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 			string_be(txid, txid_be);
 			txids.push_back(txid_be);
 			if (strcmp(hash_be, txid_be)) {
-				//debuglog("%s segwit tx found, height %d\n", coind->symbol, templ->height);
 				templ->has_segwit_txs = true; // if not, its useless to generate a segwit block, bigger
 			}
 		} else {
@@ -405,6 +424,17 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 
 		const char *d = json_get_string(json_tx->u.array.values[i], "data");
 		templ->txdata.push_back(d);
+
+		// if wanted, we can limit the count of txs to include
+		if (g_limit_txs_per_block && i >= g_limit_txs_per_block-2) {
+			debuglog("limiting block to %d first txs (of %d)\n", g_limit_txs_per_block, json_tx->u.array.length);
+			templ->has_filtered_txs = true;
+		}
+	}
+
+	if (templ->has_filtered_txs) {
+		// coinbasevalue is a total with all tx fees, need to reduce it if some are skipped
+		templ->value -= templ->filtered_txs_fee;
 	}
 
 	templ->txmerkles[0] = '\0';

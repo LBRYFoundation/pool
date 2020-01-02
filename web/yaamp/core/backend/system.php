@@ -2,9 +2,6 @@
 
 function BackendDoBackup()
 {
-	$d = date('Y-m-d-H', time());
-	$filename = "/root/backup/yaamp-$d.sql";
-
 	if (is_readable("/usr/bin/xz")) {
 		$ziptool = "xz --threads=4"; $ext = ".xz";
 	} else {
@@ -18,6 +15,9 @@ function BackendDoBackup()
 
 	$user = YIIMP_MYSQLDUMP_USER;
 	$pass = YIIMP_MYSQLDUMP_PASS;
+
+	$d = date('Y-m-d-H', time());
+	$filename = YIIMP_MYSQLDUMP_PATH.DIRECTORY_SEPARATOR."$db-$d.sql";
 
 	if (1) {
 		// faster on huge databases if the disk is fast (nvme), reduce the db lock time
@@ -35,8 +35,7 @@ function BackendQuickClean()
 
 	foreach($coins as $coin)
 	{
-		$delay = time() - 24*60*60;
-		if ($coin->symbol=='DCR') $delay = time() - 7*24*60*60;
+		$delay = time() - 7*24*60*60;
 
 		$id = dboscalar("select id from blocks where coin_id=$coin->id and time<$delay and
 			id not in (select blockid from earnings where coinid=$coin->id)
@@ -135,7 +134,7 @@ function BackendCleanDatabase()
 	marketHistoryPrune();
 
 	$delay = time() - 60*24*60*60;
-//	dborun("delete from blocks where time<$delay");
+	dborun("DELETE from blocks where time<$delay");
 	dborun("delete from hashstats where time<$delay");
 	dborun("delete from payouts where time<$delay");
 	dborun("delete from rentertxs where time<$delay");

@@ -135,6 +135,11 @@ class Bitcoin {
 		// The ID should be unique for each call
 		$this->id++;
 
+		if (stripos($method, 'dump') !== false || stripos($method, 'backupwallet') !== false) {
+			$this->error = "$method method is not authorized!";
+			return FALSE;
+		}
+
 		// If no parameters are passed, this will be an empty array
 		if($method == 'getblocktemplate')
 		{

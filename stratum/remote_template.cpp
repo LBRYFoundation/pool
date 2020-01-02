@@ -62,7 +62,7 @@ void remote_create_job(YAAMP_REMOTE *remote, json_value *json_params)
 	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
 	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
 
-	strncpy(templ->prevhash_be, json_params->u.array.values[1]->u.string.ptr, 1023);
+	strncpy(templ->prevhash_be, json_params->u.array.values[1]->u.string.ptr, sizeof(templ->prevhash_be)-1);
 	strncpy(templ->coinb1, json_params->u.array.values[2]->u.string.ptr, 1023);
 	strncpy(templ->coinb2, json_params->u.array.values[3]->u.string.ptr, 1023);
 

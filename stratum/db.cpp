@@ -1,5 +1,6 @@
 
 #include "stratum.h"
+#include <mysql/mysqld_error.h>
 #include <signal.h>
 
 void db_reconnect(YAAMP_DB *db)
@@ -12,7 +13,7 @@ void db_reconnect(YAAMP_DB *db)
 	mysql_init(&db->mysql);
 	for(int i=0; i<6; i++)
 	{
-		MYSQL *p = mysql_real_connect(&db->mysql, g_sql_host, g_sql_username, g_sql_password, g_sql_database, 0, 0, 0);
+		MYSQL *p = mysql_real_connect(&db->mysql, g_sql_host, g_sql_username, g_sql_password, g_sql_database, g_sql_port, 0, 0);
 		if(p) break;
 
 		stratumlog("%d, %s\n", i, mysql_error(&db->mysql));
@@ -42,13 +43,29 @@ void db_close(YAAMP_DB *db)
 
 char *db_clean_string(YAAMP_DB *db, char *string)
 {
-	string[1000] = 0;
-	char tmp[1024];
-
-	unsigned long ret = mysql_real_escape_string(&db->mysql, tmp, string, strlen(string));
-	strcpy(string, tmp);
-
+	char *c = string;
+	size_t i, len = strlen(string) & 0x1FF;
+	for (i = 0; i < len; i++) {
+		bool isdigit = (c[i] >= '0' && c[i] <= '9');
+		bool isalpha = (c[i] >= 'a' && c[i] <= 'z') || (c[i] >= 'A' && c[i] <= 'Z');
+		bool issepch = (c[i] == '=' || c[i] == ',' || c[i] == ';' || c[i] == '.');
+		bool isextra = (c[i] == '/' || c[i] == '-' || c[i] == '_');
+		if (!isdigit && !isalpha && !issepch && !isextra) { c[i] = '\0'; break; }
+	}
 	return string;
+}
+
+// allow more chars without the most hurting ones (bench device names)
+static void clean_html(char* string)
+{
+	char *c = string;
+	size_t i, len = strlen(string) & 0x1FF;
+	for (i = 0; i < len; i++) {
+		if (c[i] == '<' || c[i] == '>' || c[i] == '%' || c[i] == '\\' || c[i] == '"' || c[i] == '\'') {
+			c[i] = '\0'; break;
+		}
+	}
+	if (strstr(string, "script")) strcpy(string, "");
 }
 
 void db_query(YAAMP_DB *db, const char *format, ...)
@@ -70,6 +87,7 @@ void db_query(YAAMP_DB *db, const char *format, ...)
 		res = mysql_errno(&db->mysql);
 
 		stratumlog("SQL ERROR: %d, %s\n", res, mysql_error(&db->mysql));
+		if(res == ER_DUP_ENTRY) break; // rarely seen on new user creation
 		if(res != CR_SERVER_GONE_ERROR && res != CR_SERVER_LOST) exit(1);
 
 		usleep(100*YAAMP_MS);
@@ -87,17 +105,17 @@ void db_register_stratum(YAAMP_DB *db)
 	int t = time(NULL);
 	if(!db) return;
 
-	db_query(db, "INSERT INTO stratums (pid, time, started, algo, port) VALUES (%d, %d, %d, '%s', %d) "
-		" ON DUPLICATE KEY UPDATE time=%d, algo='%s', port=%d",
-		pid, t, t, g_stratum_algo, g_tcp_port,
-		t, g_stratum_algo, g_tcp_port
+	db_query(db, "INSERT INTO stratums (pid, time, started, algo, url, port) VALUES (%d,%d,%d,'%s','%s',%d) "
+		" ON DUPLICATE KEY UPDATE time=%d, algo='%s', url='%s', port=%d",
+		pid, t, t, g_stratum_algo, g_tcp_server, g_tcp_port,
+		t, g_stratum_algo, g_tcp_server, g_tcp_port
 	);
 }
 
 void db_update_algos(YAAMP_DB *db)
 {
 	int pid = getpid();
-	//int fds = 0; // todo, sample: ls -l /proc/$PID/fd | grep socket | grep -c .
+	int fds = opened_files();
 	if(!db) return;
 
 	if(g_current_algo->overflow)
@@ -117,7 +135,8 @@ void db_update_algos(YAAMP_DB *db)
 		}
 	}
 
-	db_query(db, "UPDATE stratums SET workers=%d, symbol=%s WHERE pid=%d", g_list_client.count, symbol, pid);
+	db_query(db, "UPDATE stratums SET workers=%d, fds=%d, symbol=%s WHERE pid=%d",
+		g_list_client.count, fds, symbol, pid);
 
 	///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -200,6 +219,17 @@ void db_update_coinds(YAAMP_DB *db)
 			coind->newcoind = false;
 
 		strcpy(coind->name, row[1]);
+		strcpy(coind->symbol, row[20]);
+		// optional coin filters
+		if(coind->newcoind) {
+			bool ignore = false;
+			if (strlen(g_stratum_coin_include) && !strstr(g_stratum_coin_include, coind->symbol)) ignore = true;
+			if (strlen(g_stratum_coin_exclude) && strstr(g_stratum_coin_exclude, coind->symbol)) ignore = true;
+			if (ignore) {
+				object_delete(coind);
+				continue;
+			}
+		}
 
 		if(row[7]) strcpy(coind->wallet, row[7]);
 		if(row[6]) strcpy(coind->rpcencoding, row[6]);
@@ -252,7 +282,6 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[18]) coind->charity_percent = atof(row[18]);
 		if(row[19]) coind->reward_mul = atof(row[19]);
 
-		strcpy(coind->symbol, row[20]);
 		if(row[21]) coind->isaux = atoi(row[21]);
 
 		if(row[22] && row[23]) coind->actual_ttf = min(atoi(row[22]), atoi(row[23]));
@@ -282,20 +311,30 @@ void db_update_coinds(YAAMP_DB *db)
 		if(!strcmp(coind->symbol, "DCR") && strcmp(coind->rpcencoding, "DCR"))
 			strcpy(coind->rpcencoding, "DCR");
 
+		// old dash masternodes coins..
+		if(coind->hasmasternodes) {
+			if (strcmp(coind->symbol, "ALQO") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "BSD") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "BWK") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "CHC") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "CRW") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "DNR") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "FLAX") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "ITZ") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "J") == 0 || strcmp(coind->symbol2, "J") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "LAX") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "MAG") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "PBS") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "URALS") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "VSX") == 0) coind->oldmasternodes = true;
+			if (strcmp(coind->symbol, "XLR") == 0) coind->oldmasternodes = true;
+		}
+
 		////////////////////////////////////////////////////////////////////////////////////////////////////
 
 		//coind->touch = true;
 		if(coind->newcoind)
 		{
-			// optional coin filter
-			bool ignore = false;
-			if (strlen(g_stratum_coin_include) && !strstr(g_stratum_coin_include, coind->symbol)) ignore = true;
-			if (strlen(g_stratum_coin_exclude) && strstr(g_stratum_coin_exclude, coind->symbol)) ignore = true;
-			if (ignore) {
-				object_delete(coind);
-				continue;
-			}
-
 			debuglog("connecting to coind %s\n", coind->symbol);
 
 			bool b = rpc_connect(&coind->rpc);
@@ -507,9 +546,14 @@ static void _json_str_safe(YAAMP_DB *db, json_value *json, const char *key, size
 	json_value *val = json_get_val(json, key);
 	out[0] = '\0';
 	if (db && val && json_is_string(val)) {
-		strncpy(out, json_string_value(val), maxlen);
+		char str[128] = { 0 };
+		char escaped[256] = { 0 };
+		snprintf(str, sizeof(str)-1, "%s", json_string_value(val));
+		str[maxlen-1] = '\0'; // truncate to dest len
+		clean_html(str);
+		mysql_real_escape_string(&db->mysql, escaped, str, strlen(str));
+		snprintf(out, maxlen, "%s", escaped);
 		out[maxlen-1] = '\0';
-		db_clean_string(db, out);
 	}
 }
 #define json_str_safe(stats, k, out) _json_str_safe(db, stats, k, sizeof(out), out)

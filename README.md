@@ -4,6 +4,9 @@ To install the pool you will need:
 1. Ubuntu 16.04 VPS
 2. Install Script
 
+WARNINGS
+- Use at your own risks.
+
 The install Script will install the pool and all dependencies needed.
 
 TO INSTALL:

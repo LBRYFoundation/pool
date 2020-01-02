@@ -26,6 +26,7 @@ class UserCommand extends CConsoleCommand
 			echo "YiiMP user command(s)\n";
 			echo "Usage: yiimp user delete <id|address>\n";
 			echo "       yiimp user swap <address> <symbol> - assign symbol\n";
+			echo "       yiimp user search <ip>\n";
 			echo "       yiimp user purge [days] (default 180)\n";
 			return 1;
 
@@ -48,12 +49,19 @@ class UserCommand extends CConsoleCommand
 			echo "$nb user(s) deleted\n";
 			return 0;
 
+		} else if ($args[0] == 'search') {
+			if (!isset($args[1]))
+				die("usage: yiimp user search <ip>\n");
+			$addr = $args[1];
+			$this->searchUserByIP($addr);
+
 		} else if ($args[0] == 'swap') {
 			if (!isset($args[2]))
-				die("usage: yiimp user swap <address> <symbol> - assign symbol");
+				die("usage: yiimp user swap <address> <symbol> [force] - assign symbol\n");
 			$addr = $args[1];
 			$symbol = $args[2];
-			$this->swapUserCoin($addr, $symbol);
+			$force = arraySafeVal($args, 3, false);
+			$this->swapUserCoin($addr, $symbol, $force);
 			return 0;
 		}
 	}
@@ -122,6 +130,34 @@ class UserCommand extends CConsoleCommand
 		}
 
 		return $nbDeleted;
+	}
+
+	/**
+	 * Search users by worker ip
+	 */
+	public function searchUserByIP($ip)
+	{
+		$workers = new db_workers;
+		$rows = $workers->findAll(array(
+			'condition'=>'ip LIKE :ip',
+			'params'=>array(':ip'=>"%$ip%"),
+			'limit'=>25,
+			'order'=>'id DESC',
+		));
+
+		if (empty($rows)) {
+			echo "no user(s) found with this ip\n";
+			return 0;
+		}
+
+		foreach ($rows as $worker) {
+			$user = getdbo('db_accounts', $worker->userid);
+			if (!$user) continue;
+			$time = strftime("%Y-%m-%d %H:%M:%S", $worker->time);
+			echo "$time\t{$user->username}\t{$worker->ip}\t{$worker->algo}\n";
+		}
+
+		return 0;
 	}
 
 	/**

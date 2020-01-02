@@ -90,7 +90,7 @@ foreach($db_blocks as $db_block)
 
 	echo '<tr class="ssrow">';
 	echo '<td width="18px"><img width="16px" src="'.$coin->image.'"></td>';
-	echo '<td class="row"><b class="row">'.$link.'</b> ('.$coin->algo.')'.$flags.'</td>';
+	echo '<td class="row"><b class="row">'.$link.'</b> ('.$db_block->algo.')'.$flags.'</td>';
 	echo '<td class="row right"><b>'.$reward.' '.$coin->symbol_show.'</b></td>';
 	echo '<td class="row right" title="found '.$db_block->difficulty_user.'">'.$difficulty.'</td>';
 	echo '<td class="row right">'.$height.'</td>';

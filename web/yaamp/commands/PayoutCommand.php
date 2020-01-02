@@ -35,6 +35,10 @@ class PayoutCommand extends CConsoleCommand
 			echo "Yiimp payout command\n";
 			echo "Usage: yiimp payout check <symbol> [fixit]\n";
 			echo "Usage:       payout coinswaps\n";
+			echo "Usage:       payout confirmations <symbol>\n";
+			if (YIIMP_CLI_ALLOW_TXS)
+			echo "Usage:       payout redotx <txid>\n";
+
 			return 1;
 
 		} elseif ($command == 'check') {
@@ -51,6 +55,14 @@ class PayoutCommand extends CConsoleCommand
 
 		} elseif ($command == 'coinswaps') {
 			$this->checkCoinSwaps($args);
+			return 0;
+
+		} elseif ($command == 'confirmations') {
+			$this->checkPayoutsConfirmations($args);
+			return 0;
+
+		} elseif ($command == 'redotx' && YIIMP_CLI_ALLOW_TXS) {
+			$this->redoTransaction($args);
 			return 0;
 		}
 	}
@@ -121,9 +133,12 @@ class PayoutCommand extends CConsoleCommand
 		if (empty($payouts) || empty($ids))
 			return 0;
 
+		$DCR = ($coin->rpcencoding == 'DCR' || $coin->getOfficialSymbol() == 'DCR');
+		$DGB = ($coin->rpcencoding == 'DGB' || $coin->getOfficialSymbol() == 'DGB');
+
 		$remote = new WalletRPC($coin);
 		$account = '';
-		if ($coin->rpcencoding == 'DCR') $account = '*';
+		if ($DCR || $DGB) $account = '*';
 		$rawtxs = $remote->listtransactions($account, 25000);
 
 		foreach ($ids as $uid => $user_addr)
@@ -261,6 +276,95 @@ class PayoutCommand extends CConsoleCommand
 			}
 		} else {
 			echo "earnings: all fine\n";
+		}
+	}
+
+	/**
+	 * Can be used to redo a payment made on a bad fork...
+	 */
+	protected function redoTransaction($args)
+	{
+		$txid = arraySafeVal($args, 1);
+		if (empty($txid))
+			die("Usage..\n");
+
+		$payouts = getdbolist('db_payouts', "tx=:txid", array(':txid'=>$txid));
+		if (empty($payouts))
+			die("Invalid payout txid\n");
+		echo "users to pay: ".count($payouts)."\n";
+
+		$payout = $payouts[0];
+		$coin = getdbo('db_coins', $payout->idcoin);
+		if (!$coin || !$coin->installed)
+			die("Invalid payout coin id\n");
+
+		$relayfee = 0.0001;
+
+		$dests = array(); $total = 0.;
+		foreach ($payouts as $payout) {
+			$user = getdbo('db_accounts', $payout->account_id);
+			if (!$user || $user->coinid != $coin->id) continue;
+			if (doubleval($payout->amount) < $relayfee) continue; // dust if < relayfee
+			$dests[$user->username] = doubleval($payout->amount);
+			$total += doubleval($payout->amount);
+		}
+
+		echo "$total {$coin->symbol} to pay...\n";
+
+		$nbnew = 0;
+		$remote = new WalletRPC($coin);
+		$res = $remote->sendmany((string) $coin->account, $dests);
+		if (!$res) var_dump($remote->error);
+		else {
+			$new_txid = $res;
+			echo "txid: $new_txid\n";
+			foreach ($payouts as $payout) {
+				if (doubleval($payout->amount) < $relayfee) continue;
+				$p = new db_payouts;
+				$p->time = time();
+				$p->idcoin = $coin->id;
+				$p->amount = doubleval($payout->amount);
+				$p->account_id = $payout->account_id;
+				$p->completed = 1;
+				$p->fee = 0;
+				$p->tx = $new_txid;
+				$nbnew += $p->insert();
+			}
+			echo "payouts rows added: $nbnew\n";
+			if ($nbnew == count($payouts)) {
+				$res = dborun("UPDATE payouts SET completed=0, tx='orphaned', memoid='redo' WHERE tx=:txid", array(':txid'=>$txid));
+				echo "payouts marked as 'orphaned': $res\n";
+			}
+		}
+		return $nbnew;
+	}
+
+	/**
+	 * List the last payouts made for a wallet and check if the tx have confirmations
+	 */
+	protected function checkPayoutsConfirmations($args)
+	{
+		$symbol = arraySafeVal($args, 1);
+		if (empty($symbol))
+			die("payout confirmations <symbol>\n");
+
+		$coin = getdbosql('db_coins', "symbol=:symbol", array(':symbol'=>$symbol));
+		if (!$coin) {
+			echo "wallet $symbol not found!\n";
+			return 0;
+		}
+		$since = time() - (72 * 3600);
+		$data = dbolist("SELECT P.tx, MAX(P.time) as time, SUM(P.amount) as amount FROM payouts P ".
+			"WHERE P.time>$since AND P.idcoin=".$coin->id." ".
+			"GROUP BY P.tx ORDER BY time DESC"
+		);
+
+		$remote = new WalletRPC($coin);
+		foreach ($data as $row) {
+			$txid = $row['tx'];
+			$tx = $remote->gettransaction($txid);
+			echo strftime('%Y-%m-%d %H:%M', $row['time'])." $txid ".$tx['confirmations'].
+				" confs (".altcoinvaluetoa($row['amount'],4)." $symbol, fees: ".bitcoinvaluetoa($tx['fee']).")\n";
 		}
 	}
 }

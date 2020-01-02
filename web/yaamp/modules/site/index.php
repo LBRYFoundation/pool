@@ -29,9 +29,11 @@ $payout_freq = (YAAMP_PAYMENTS_FREQ / 3600)." hours";
 
 <div class="main-left-box">
 <div class="main-left-title">LBRY COMMUNITY MINING POOL</div>
+
 <div class="main-left-inner">
 
 <ul>
+
 
 <li>Welcome to the LBRY Community Mining Pool.</li>
 <li>Please feel free to mine here as an alternative to the bigger pools.</li>
