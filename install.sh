@@ -488,8 +488,12 @@ sudo ln -s /var/web /var/www/$server_name/html
 sudo service nginx restart
 	if [[ ("$ssl_install" == "y" || "$ssl_install" == "Y" || "$ssl_install" == "") ]]; then
     output "Install LetsEncrypt and setting SSL"
-    sudo aptitude -y install letsencrypt
-    sudo letsencrypt certonly -a webroot --webroot-path=/var/web --email "$EMAIL" --agree-tos -d "$server_name" -d www."$server_name"
+    sudo apt install software-properties-common
+    sudo add-apt-repository universe
+    sudo add-apt-repository ppa:certbot/certbot
+    sudo apt update
+    sudo apt install -y certbot python-certbot-nginx
+    sudo certbot certonly -a webroot --webroot-path=/var/web --email "$EMAIL" --agree-tos -d "$server_name" -d www."$server_name"
     sudo rm /etc/nginx/sites-available/$server_name.conf
     sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
     # I am SSL Man!
