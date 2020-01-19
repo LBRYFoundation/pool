@@ -61,8 +61,7 @@ output ""
     sudo apt update
     output "Installing Required Software."
     output ""
-    sudo apt install nginx mysql-server php7.4-opcache php7.3-fpm php7.4 php7.4-common php7.4-gd php7.4-mysql php7.4-imap php7.4-cli php7.4-cgi php-pear php-auth php7.4-mcrypt mcrypt imagemagick libruby php7.4-curl php7.4-intl php7.4-pspell php7.4-recode php7.4-sqlite3 php7.4-tidy php7.4-xmlrpc php7.4-xsl memcached php7.4-memcache php7.4-imagick php7.4-gettext php7.4-zip php7.4-mbstring libgmp3-dev libmysqlclient-dev libcurl4-gnutls-dev libkrb5-dev libldap2-dev libidn11-dev gnutls-dev librtmp-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils sendmail git pwgen unzip libdb4.8-dev libdb4.8++-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils git libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev -y
-    
+sudo apt install nginx mysql-server php7.4-opcache php7.3-fpm php7.4-common php7.4-gd php7.4-mysql php7.4-imap php7.4-cli php7.4-cgi php7.4-curl php7.4-intl php7.4-pspell recode php7.4-sqlite3 php7.4-tidy php7.4-xmlrpc php7.4-xsl php7.4-memcache php7.4-imagick php7.4-zip php7.4-mbstring php-pear php-auth-sasl mcrypt imagemagick libruby memcached libgmp3-dev libmysqlclient-dev libcurl4-gnutls-dev libkrb5-dev libldap2-dev libidn11-dev gnutls-dev librtmp-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils sendmail git pwgen unzip libdb4.8-dev libdb4.8++-dev libssl-dev  libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev -y    
     output "Configuring Nginx server."
     output ""
     sudo rm /etc/nginx/sites-enabled/default
