@@ -219,7 +219,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     
         location ~ ^/index\.php$ {
             fastcgi_split_path_info ^(.+\.php)(/.+)$;
-            fastcgi_pass unix:/var/run/php/php7.0-fpm.sock;
+            fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
             fastcgi_index index.php;
             include fastcgi_params;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -251,7 +251,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     		deny all;
   	}
   		location ~ /phpmyadmin/(.+\.php)$ {
-    		fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+    		fastcgi_pass unix:/run/php/php7.4-fpm.sock;
     		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     		include fastcgi_params;
     		include snippets/fastcgi-php.conf;
@@ -339,7 +339,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
         
             location ~ ^/index\.php$ {
                 fastcgi_split_path_info ^(.+\.php)(/.+)$;
-                fastcgi_pass unix:/var/run/php/php7.0-fpm.sock;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
                 fastcgi_index index.php;
                 include fastcgi_params;
                 fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -370,7 +370,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     		deny all;
   	}
   		location ~ /phpmyadmin/(.+\.php)$ {
-    		fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+    		fastcgi_pass unix:/run/php/php7.4-fpm.sock;
     		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     		include fastcgi_params;
     		include snippets/fastcgi-php.conf;
@@ -420,7 +420,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     
         location ~ ^/index\.php$ {
             fastcgi_split_path_info ^(.+\.php)(/.+)$;
-            fastcgi_pass unix:/var/run/php/php7.0-fpm.sock;
+            fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
             fastcgi_index index.php;
             include fastcgi_params;
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -452,7 +452,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     		deny all;
   	}
   		location ~ /phpmyadmin/(.+\.php)$ {
-    		fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+    		fastcgi_pass unix:/run/php/php7.4-fpm.sock;
     		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     		include fastcgi_params;
     		include snippets/fastcgi-php.conf;
@@ -540,7 +540,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
         
             location ~ ^/index\.php$ {
                 fastcgi_split_path_info ^(.+\.php)(/.+)$;
-                fastcgi_pass unix:/var/run/php/php7.0-fpm.sock;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
                 fastcgi_index index.php;
                 include fastcgi_params;
                 fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
@@ -571,7 +571,7 @@ echo 'include /etc/nginx/blockuseragents.rules;
     		deny all;
   	}
   		location ~ /phpmyadmin/(.+\.php)$ {
-    		fastcgi_pass unix:/run/php/php7.0-fpm.sock;
+    		fastcgi_pass unix:/run/php/php7.4-fpm.sock;
     		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     		include fastcgi_params;
     		include snippets/fastcgi-php.conf;
