@@ -65,7 +65,7 @@ default         0;
         
     output "Installing MySQL Repository."
     output ""
-    curl https://dev.mysql.com/get/mysql-apt-config_0.8.14-1_all.deb > /tmp/mysql-repo.deb | sudo dpkg -i /tmp/mysql-repo.deb
+    sudo curl https://dev.mysql.com/get/mysql-apt-config_0.8.14-1_all.deb > /tmp/mysql-repo.deb | sudo dpkg -i /tmp/mysql-repo.deb
     sudo apt update
     output "Installing MySQL."
     output ""
