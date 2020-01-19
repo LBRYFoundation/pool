@@ -1,6 +1,8 @@
 #!/bin/bash
 ################################################################################
-# Author: Oakey22
+# Original Author: Oakey22
+# Maintained by: Coolguy3289
+# Version 1.9 (January 2020)
 #
 # Program:
 #   Install Lbry Pool on Ubuntu 18.04 running Nginx, MariaDB, and php7.x
