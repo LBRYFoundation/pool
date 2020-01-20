@@ -48,7 +48,8 @@ output ""
     # install all dependencies
     output "Installing MySQL Repository."
     output ""
-    wget https://dev.mysql.com/get/mysql-apt-config_0.8.14-1_all.deb > /tmp/mysql-repo.deb | sudo dpkg -i ./mysql-apt-config_0.8.14-1_all.deb
+    wget https://dev.mysql.com/get/mysql-apt-config_0.8.14-1_all.deb
+    sudo dpkg -i ./mysql-apt-config_0.8.14-1_all.deb
     sudo apt update
     # create random password
     rootpasswd=$(openssl rand -base64 12)
