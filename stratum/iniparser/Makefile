@@ -1,19 +1,11 @@
 #
 # iniparser Makefile
 #
-.PHONY: example
 
 # Compiler settings
 CC      ?= gcc
-
-CFLAGS  += -fPIC -Wall -Wextra -ansi -pedantic
-ifndef DEBUG
-ADDITIONAL_CFLAGS  ?= -O2
-else
-ADDITIONAL_CFLAGS  ?= -g
-endif
-
-CFLAGS += ${ADDITIONAL_CFLAGS}
+CFLAGS	?= -g -O0
+CFLAGS  += -fPIC -Wall -ansi -std=c99 -pedantic
 
 # Ar settings to build the library
 AR	    ?= ar
@@ -22,9 +14,6 @@ ARFLAGS = rcv
 SHLD = ${CC} ${CFLAGS}
 LDSHFLAGS = -shared -Wl,-Bsymbolic
 LDFLAGS += -Wl,-rpath -Wl,/usr/lib -Wl,-rpath,/usr/lib
-
-# .so.0 is for version 3.x, .so.1 is 4.x
-SO_TARGET ?= libiniparser.so.1
 
 # Set RANLIB to ranlib on systems that require it (Sun OS < 4, Mac OSX)
 # RANLIB  = ranlib
@@ -56,31 +45,28 @@ SRCS = src/iniparser.c \
 OBJS = $(SRCS:.c=.o)
 
 
-default:	libiniparser.a $(SO_TARGET)
+default:	libiniparser.a libiniparser.so
 
 libiniparser.a:	$(OBJS)
-	$(QUIET_AR)$(AR) $(ARFLAGS) $@ $^
-	$(QUIET_RANLIB)$(RANLIB) $@
+	$(AR) $(ARFLAGS) $@ $^
+	$(RANLIB) $@
 
-$(SO_TARGET):	$(OBJS)
-	$(QUIET_LINK)$(SHLD) $(LDSHFLAGS) $(LDFLAGS) -o $(SO_TARGET) $(OBJS) \
-		-Wl,-soname=`basename $(SO_TARGET)`
+libiniparser.so:	$(OBJS)
+	$(QUIET_LINK)$(SHLD) $(LDSHFLAGS) $(LDFLAGS) -o $@.0 $(OBJS) \
+		-Wl,-soname=`basename $@`.0
 
 clean:
 	$(RM) $(OBJS)
-	@(cd test ; $(MAKE) clean)
 
 veryclean:
-	$(RM) $(OBJS) libiniparser.a $(SO_TARGET)
+	$(RM) $(OBJS) libiniparser.a libiniparser.so*
 	rm -rf ./html ; mkdir html
-	cd example ; $(MAKE) veryclean
 	cd test ; $(MAKE) veryclean
 
 docs:
 	@(cd doc ; $(MAKE))
 	
-check: $(SO_TARGET)
+check: default
 	@(cd test ; $(MAKE))
 
-example: libiniparser.a
-	@(cd example ; $(MAKE))	
+.PHONY: default clean veryclean docs check

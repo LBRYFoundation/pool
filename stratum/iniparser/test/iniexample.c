@@ -25,11 +25,7 @@ void create_example_ini_file(void)
 {
     FILE    *   ini ;
 
-    if ((ini=fopen("example.ini", "w"))==NULL) {
-        fprintf(stderr, "iniparser: cannot create example.ini\n");
-        return ;
-    }
-
+    ini = fopen("example.ini", "w");
     fprintf(ini,
     "#\n"
     "# This is an example of ini file\n"
@@ -62,7 +58,7 @@ int parse_ini_file(char * ini_name)
     int             b ;
     int             i ;
     double          d ;
-    const char  *   s ;
+    char        *   s ;
 
     ini = iniparser_load(ini_name);
     if (ini==NULL) {
