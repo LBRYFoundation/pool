@@ -33,6 +33,18 @@ extern "C" {
 
 /*-------------------------------------------------------------------------*/
 /**
+  @brief    Configure a function to receive the error messages.
+  @param    errback  Function to call.
+
+  By default, the error will be printed on stderr. If a null pointer is passed
+  as errback the error callback will be switched back to default.
+ */
+/*--------------------------------------------------------------------------*/
+
+void iniparser_set_error_callback(int (*errback)(const char *, ...));
+
+/*-------------------------------------------------------------------------*/
+/**
   @brief    Get number of sections in a dictionary
   @param    d   Dictionary to examine
   @return   int Number of sections found in dictionary
@@ -50,7 +62,7 @@ extern "C" {
  */
 /*--------------------------------------------------------------------------*/
 
-int iniparser_getnsec(dictionary * d);
+int iniparser_getnsec(const dictionary * d);
 
 
 /*-------------------------------------------------------------------------*/
@@ -68,7 +80,7 @@ int iniparser_getnsec(dictionary * d);
  */
 /*--------------------------------------------------------------------------*/
 
-char * iniparser_getsecname(dictionary * d, int n);
+const char * iniparser_getsecname(const dictionary * d, int n);
 
 
 /*-------------------------------------------------------------------------*/
@@ -83,7 +95,7 @@ char * iniparser_getsecname(dictionary * d, int n);
  */
 /*--------------------------------------------------------------------------*/
 
-void iniparser_dump_ini(dictionary * d, FILE * f);
+void iniparser_dump_ini(const dictionary * d, FILE * f);
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -98,7 +110,7 @@ void iniparser_dump_ini(dictionary * d, FILE * f);
  */
 /*--------------------------------------------------------------------------*/
 
-void iniparser_dumpsection_ini(dictionary * d, char * s, FILE * f);
+void iniparser_dumpsection_ini(const dictionary * d, const char * s, FILE * f);
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -113,7 +125,7 @@ void iniparser_dumpsection_ini(dictionary * d, char * s, FILE * f);
   purposes mostly.
  */
 /*--------------------------------------------------------------------------*/
-void iniparser_dump(dictionary * d, FILE * f);
+void iniparser_dump(const dictionary * d, FILE * f);
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -123,23 +135,26 @@ void iniparser_dump(dictionary * d, FILE * f);
   @return   Number of keys in section
  */
 /*--------------------------------------------------------------------------*/
-int iniparser_getsecnkeys(dictionary * d, char * s);
+int iniparser_getsecnkeys(const dictionary * d, const char * s);
 
 /*-------------------------------------------------------------------------*/
 /**
   @brief    Get the number of keys in a section of a dictionary.
-  @param    d   Dictionary to examine
-  @param    s   Section name of dictionary to examine
-  @return   pointer to statically allocated character strings
+  @param    d    Dictionary to examine
+  @param    s    Section name of dictionary to examine
+  @param    keys Already allocated array to store the keys in
+  @return   The pointer passed as `keys` argument or NULL in case of error
 
   This function queries a dictionary and finds all keys in a given section.
+  The keys argument should be an array of pointers which size has been
+  determined by calling `iniparser_getsecnkeys` function prior to this one.
+
   Each pointer in the returned char pointer-to-pointer is pointing to
   a string allocated in the dictionary; do not free or modify them.
-
-  This function returns NULL in case of error.
  */
 /*--------------------------------------------------------------------------*/
-char ** iniparser_getseckeys(dictionary * d, char * s);
+const char ** iniparser_getseckeys(const dictionary * d, const char * s, const char ** keys);
+
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -156,7 +171,7 @@ char ** iniparser_getseckeys(dictionary * d, char * s);
   the dictionary, do not free or modify it.
  */
 /*--------------------------------------------------------------------------*/
-char * iniparser_getstring(dictionary * d, const char * key, char * def);
+const char * iniparser_getstring(const dictionary * d, const char * key, const char * def);
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -185,7 +200,35 @@ char * iniparser_getstring(dictionary * d, const char * key, char * def);
   Credits: Thanks to A. Becker for suggesting strtol()
  */
 /*--------------------------------------------------------------------------*/
-int iniparser_getint(dictionary * d, const char * key, int notfound);
+int iniparser_getint(const dictionary * d, const char * key, int notfound);
+
+/*-------------------------------------------------------------------------*/
+/**
+  @brief    Get the string associated to a key, convert to an long int
+  @param    d Dictionary to search
+  @param    key Key string to look for
+  @param    notfound Value to return in case of error
+  @return   integer
+
+  This function queries a dictionary for a key. A key as read from an
+  ini file is given as "section:key". If the key cannot be found,
+  the notfound value is returned.
+
+  Supported values for integers include the usual C notation
+  so decimal, octal (starting with 0) and hexadecimal (starting with 0x)
+  are supported. Examples:
+
+  - "42"      ->  42
+  - "042"     ->  34 (octal -> decimal)
+  - "0x42"    ->  66 (hexa  -> decimal)
+
+  Warning: the conversion may overflow in various ways. Conversion is
+  totally outsourced to strtol(), see the associated man page for overflow
+  handling.
+ */
+/*--------------------------------------------------------------------------*/
+long int iniparser_getlongint(const dictionary * d, const char * key, long int notfound);
+
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -200,7 +243,7 @@ int iniparser_getint(dictionary * d, const char * key, int notfound);
   the notfound value is returned.
  */
 /*--------------------------------------------------------------------------*/
-double iniparser_getdouble(dictionary * d, const char * key, double notfound);
+double iniparser_getdouble(const dictionary * d, const char * key, double notfound);
 
 /*-------------------------------------------------------------------------*/
 /**
@@ -234,7 +277,7 @@ double iniparser_getdouble(dictionary * d, const char * key, double notfound);
   necessarily have to be 0 or 1.
  */
 /*--------------------------------------------------------------------------*/
-int iniparser_getboolean(dictionary * d, const char * key, int notfound);
+int iniparser_getboolean(const dictionary * d, const char * key, int notfound);
 
 
 /*-------------------------------------------------------------------------*/
@@ -243,10 +286,10 @@ int iniparser_getboolean(dictionary * d, const char * key, int notfound);
   @param    ini     Dictionary to modify.
   @param    entry   Entry to modify (entry name)
   @param    val     New value to associate to the entry.
-  @return   int 0 if Ok, -1 otherwise.
+  @return   int     0 if Ok, -1 otherwise.
 
   If the given entry can be found in the dictionary, it is modified to
-  contain the provided value. If it cannot be found, -1 is returned.
+  contain the provided value. If it cannot be found, the entry is created.
   It is Ok to set val to NULL.
  */
 /*--------------------------------------------------------------------------*/
@@ -277,7 +320,7 @@ void iniparser_unset(dictionary * ini, const char * entry);
   of querying for the presence of sections in a dictionary.
  */
 /*--------------------------------------------------------------------------*/
-int iniparser_find_entry(dictionary * ini, const char * entry) ;
+int iniparser_find_entry(const dictionary * ini, const char * entry) ;
 
 /*-------------------------------------------------------------------------*/
 /**
