@@ -761,8 +761,8 @@ tmux new -d -s loop2 bash $WEB_DIR/loop2.sh
 tmux new -d -s blocks bash $WEB_DIR/blocks.sh
 tmux new -d -s debug tail -f $LOG_DIR/debug.log
 tmux new -d -s stratum bash $STRATUM_DIR/run.sh lbry
-' | sudo -E tee ~/screen-start.sh >/dev/null 2>&1
-sudo chmod +x ~/screen-start.sh
+' | sudo -E tee ~/pool-start.sh >/dev/null 2>&1
+sudo chmod +x ~/pool-start.sh
 
 # Old screen commands:
 # screen -dmS main bash $WEB_DIR/main.sh
@@ -787,7 +787,7 @@ sudo service nginx restart
 sudo service php7.3-fpm reload
 cd ~
 wget https://github.com/lbryio/lbrycrd/releases/download/v0.17.3.2/lbrycrd-linux-1732.zip
-sudo unzip lbrycrd-linux.zip -d /usr/bin
+sudo unzip lbrycrd-linux-1732.zip -d /usr/bin
 
 lbrycrdd -daemon
 sleep 3
