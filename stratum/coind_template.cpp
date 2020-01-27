@@ -234,8 +234,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		return coind_create_template_memorypool(coind);
 
 	char params[512] = "[{}]";
-	if(!strcmp(coind->symbol, "PPC")) strcpy(params, "[]");
-	else if(g_stratum_segwit) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
+	if(g_stratum_segwit) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
 
 	json_value *json = rpc_call(&coind->rpc, "getblocktemplate", params);
 	if(!json || json_is_null(json))
