@@ -343,8 +343,6 @@ static bool ntime_valid_range(const char ntimehex[])
 	uint32_t ntime = 0;
 	if (strlen(ntimehex) != 8) return false;
 	sscanf(ntimehex, "%8x", &ntime);
-	if (ntime < 0x5b000000 || ntime > 0x60000000) // 14 Jan 2021
-		return false;
 	time(&rawtime);
 	return (abs(rawtime - ntime) < (30 * 60));
 }
