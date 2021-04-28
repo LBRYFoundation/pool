@@ -1,8 +1,12 @@
-Lbry Mining Pool based on Yiimp
+# Lbry Mining Pool based on Yiimp
 
-To install the pool you will need:
-1. Ubuntu 16.04 VPS
-2. Install Script
+
+### TODO: Rewrite this README, Rewrite Install Script to be more logical, Do it all again to document the hax. Be sure to rewrite things to use TMUX and document as such.
+
+
+## Prerequisites:
+1. Ubuntu 18.04
+2. Install Script (Provided in this repo)
 
 WARNINGS
 - Use at your own risks.
@@ -10,27 +14,27 @@ WARNINGS
 The install Script will install the pool and all dependencies needed.
 
 TO INSTALL:
-1. Log in to VPS
+1. Log in to your server
 2. Create new user - sudo adduser (username)
 3. Add user to sudo group - sudo adduser (username) sudo
 4. Log in to new user - sudo su (username)
 5. cd ~/
 6. `wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh`
 7. Follow the instructions on the screen.
-8. sudo bash screen-start.sh
+8. sudo bash pool-start.sh
 
 This will setup the pool ready for coin daemons to be added.
 
 You can find sample config files in web/serverconfig.sample.php and web/keys.sample.php
 
 
-You need at least three backend shells (in screen) running these scripts:
+You need at least three backend shells (in tmux) running these scripts:
 
 	web/main.sh
 	web/loop2.sh
 	web/block.sh
 	
-This is done running the screen-start.sh script in the home folder.
+This is done running the pool-start.sh script in the home folder.
 
 Now you will need to edit the coin in the admin panel, this will be http://IP/site/ADMIN_ADDRESS_USED_WHILE_INSTALLING then go to Coins on the headers, Find LBRY Credits and click LBC.
 
@@ -90,4 +94,5 @@ Credits:
 Thanks to globalzon to have released the initial Yaamp source code.
 Thanks to tpruvot for updating the source code to yiimp.
 Thanks to oakey22 for customising this for Lbry.
+Thanks to Coolguy3289 for picking this project back up and getting the software compatible with lbrycrd again.
 
