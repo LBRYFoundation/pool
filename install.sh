@@ -2,7 +2,7 @@
 ################################################################################
 # Original Author: Oakey22
 # Maintained by: Coolguy3289
-# Version 1.9 (January 2020)
+# Version 1.99 (April 2021)
 #
 # Program:
 #   Install Lbry Pool on Ubuntu 18.04 running Nginx, MariaDB, and php7.x
@@ -41,8 +41,17 @@ output ""
     output ""
     
     # update package and upgrade Ubuntu
+    output "Updating System through apt"
     sudo apt update
     sudo apt upgrade -y
+    sudo apt autoremove -y
+    output "Removing Snapd, and Cloud-Init (Ubuntu 18.x+)
+    sudo snap stop lxc && sudo snap remove lxc
+    sudo snap stop core18 && sudo snap remove core18
+    sudo snap remove snapd
+    sudo apt purge -y snapd*
+    sudo apt purge cloud-init*
+    sudo rm -rf /etc/cloud
     sudo apt autoremove -y
     clear
     # install all dependencies
