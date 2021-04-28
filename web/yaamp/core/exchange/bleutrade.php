@@ -47,3 +47,44 @@ function bleutrade_api_query($method, $params='')
 
 	return $obj;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// manual update of one market
+function bleutrade_update_market($market)
+{
+	$exchange = 'bleutrade';
+	if (is_string($market))
+	{
+		$symbol = $market;
+		$coin = getdbosql('db_coins', "symbol=:sym", array(':sym'=>$symbol));
+		if(!$coin) return false;
+		$pair = $symbol."_BTC";
+		$market = getdbosql('db_markets', "coinid={$coin->id} AND name='$exchange'");
+		if(!$market) return false;
+
+	} else if (is_object($market)) {
+
+		$coin = getdbo('db_coins', $market->coinid);
+		if(!$coin) return false;
+		$symbol = $coin->getOfficialSymbol();
+		$pair = $symbol."_BTC";
+		if (!empty($market->base_coin)) $pair = $symbol.'_'.$market->base_coin;
+	}
+
+	$t1 = microtime(true);
+	$m = bleutrade_api_query('public/getticker', '&market='.$pair);
+	if(!is_object($m) || !$m->success || empty($m->result)) return false;
+	$ticker = $m->result[0];
+
+	$price2 = ($ticker->Bid+$ticker->Ask)/2;
+	$market->price2 = AverageIncrement($market->price2, $price2);
+	$market->price = AverageIncrement($market->price, $ticker->Bid);
+	$market->pricetime = time();
+	$market->save();
+
+	$apims = round((microtime(true) - $t1)*1000,3);
+	user()->setFlash('message', "$exchange $symbol price updated in $apims ms");
+
+	return true;
+}

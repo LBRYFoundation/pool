@@ -22,6 +22,7 @@ echo <<<EOT
 
 <style type="text/css">
 span.block { padding: 2px; display: inline-block; text-align: center; min-width: 75px; border-radius: 3px; }
+span.block.invalid  { color: white; background-color: #d9534f; }
 span.block.immature { color: white; background-color: #f0ad4e; }
 span.block.exchange { color: white; background-color: #5cb85c; }
 span.block.cleared  { color: white; background-color: gray; }
@@ -90,14 +91,23 @@ foreach($earnings as $earning)
 	echo '<td align="right" style="font-size: .8em;">'.$d.'&nbsp;ago</td>';
 	echo '<td align="right" style="font-size: .8em;">';
 
-	if($earning->status == 0)
-		echo '<span class="block immature">Immature ('.$block->confirmations.')</span>';
+	if($earning->status == 0) {
+		$eta = '';
+		if ($coin->block_time && $coin->mature_blocks) {
+			$t = (int) ($coin->mature_blocks - $block->confirmations) * $coin->block_time;
+			$eta = "ETA: ".sprintf('%dh %02dmn', ($t/3600), ($t/60)%60);
+		}
+		echo '<span class="block immature" title="'.$eta.'">Immature ('.$block->confirmations.')</span>';
+	}
 
 	else if($earning->status == 1)
 		echo '<span class="block exchange">'.(YAAMP_ALLOW_EXCHANGE ? 'Exchange' : 'Confirmed').'</span>';
 
 	else if($earning->status == 2)
 		echo '<span class="block cleared">Cleared</span>';
+
+	else if($earning->status == -1)
+		echo '<span class="block invalid">Invalid</span>';
 
 	echo "</td>";
 	echo "</tr>";

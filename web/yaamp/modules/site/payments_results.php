@@ -70,7 +70,7 @@ if (!empty($data)) foreach ($data as $row) {
 	$failed[$uid] = $row['failed'];
 }
 
-$list = getdbolist('db_accounts', "coinid!=6 $sqlFilter AND (".
+$list = getdbolist('db_accounts', "is_locked != 1 $sqlFilter AND (".
 	"balance > 0 OR last_earning > (UNIX_TIMESTAMP()-60*60) OR id IN (SELECT DISTINCT account_id FROM payouts WHERE tx IS NULL)".
 	") ORDER BY last_earning DESC $limit");
 
@@ -135,8 +135,10 @@ if ($coin_id) {
 	echo '<table class="totals">';
 	echo '<tr><th>Balances</th><td>'.bitcoinvaluetoa($total)." $symbol</td></tr>";
 	echo '<tr><th>Immature</th><td>'.bitcoinvaluetoa($totalimmat)." $symbol</td></tr>";
-	if ($totalfailed)
+	if ($totalfailed) {
 		echo '<tr class="red"><th>Failed</th><td>'.bitcoinvaluetoa($totalfailed)." $symbol</td></tr>";
+		echo '<tr><td colspan="2">'.'<a href="/site/cancelUsersPayment?id='.$coin_id.'" title="Add to balance all failed payouts">Reset all failed</a></td></tr>';
+	}
 	echo '</tr></table>';
 	echo '</div>';
 }

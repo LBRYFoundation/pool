@@ -12,12 +12,13 @@ define('YAAMP_DBUSER', 'root');
 define('YAAMP_DBPASSWORD', 'password');
 
 define('YAAMP_PRODUCTION', true);
-define('YAAMP_RENTAL', true);
+define('YAAMP_RENTAL', false);
 define('YAAMP_LIMIT_ESTIMATE', false);
 
 define('YAAMP_FEES_MINING', 0.5);
 define('YAAMP_FEES_EXCHANGE', 2);
 define('YAAMP_FEES_RENTING', 2);
+define('YAAMP_TXFEE_RENTING_WD', 0.002);
 define('YAAMP_PAYMENTS_FREQ', 3*60*60);
 define('YAAMP_PAYMENTS_MINI', 0.001);
 
@@ -33,7 +34,12 @@ define('YAAMP_SITE_URL', 'yiimp.ccminer.org');
 define('YAAMP_STRATUM_URL', YAAMP_SITE_URL); // change if your stratum server is on a different host
 define('YAAMP_SITE_NAME', 'YiiMP');
 define('YAAMP_ADMIN_EMAIL', 'yiimp@spam.la');
-define('YAAMP_ADMIN_IP', '127.0.0.1,80.236.118.26');
+define('YAAMP_ADMIN_IP', ''); // samples: "80.236.118.26,90.234.221.11" or "10.0.0.1/8"
+define('YAAMP_ADMIN_WEBCONSOLE', true);
+define('YAAMP_NOTIFY_NEW_COINS', true);
+define('YAAMP_DEFAULT_ALGO', 'lbry');
+define('YAAMP_CREATE_NEW_COINS', false);
+
 
 define('YAAMP_USE_NGINX', false);
 
@@ -42,14 +48,22 @@ define('EXCH_CRYPTOPIA_KEY', '');
 define('EXCH_POLONIEX_KEY', '');
 define('EXCH_BITTREX_KEY', '');
 define('EXCH_BLEUTRADE_KEY', '');
-define('EXCH_BTER_KEY', '');
 define('EXCH_YOBIT_KEY', '');
 define('EXCH_CCEX_KEY', '');
+define('EXCH_CEXIO_ID', '');
+define('EXCH_CEXIO_KEY', '');
+define('EXCH_COINMARKETS_USER', '');
+define('EXCH_COINMARKETS_PIN', '');
+define('EXCH_CREX24_KEY', '');
+define('EXCH_BINANCE_KEY', '');
 define('EXCH_BITSTAMP_ID','');
 define('EXCH_BITSTAMP_KEY','');
+define('EXCH_HITBTC_KEY','');
 define('EXCH_KRAKEN_KEY', '');
+define('EXCH_KUCOIN_KEY', '');
 define('EXCH_LIVECOIN_KEY', '');
 define('EXCH_NOVA_KEY', '');
+define('EXCH_STOCKSEXCHANGE_KEY', '');
 
 // Automatic withdraw to Yaamp btc wallet if btc balance > 0.3
 define('EXCH_AUTO_WITHDRAW', 0.3);

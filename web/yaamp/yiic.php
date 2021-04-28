@@ -14,7 +14,7 @@ defined('STDIN') or define('STDIN', fopen('php://stdin', 'r'));
 
 defined('YII_DEBUG') or define('YII_DEBUG',true);
 
-require_once('framework-1.1.17'.'/yii.php');
+require_once('framework'.'/yii.php');
 
 if(isset($config))
 {

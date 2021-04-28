@@ -1,10 +1,10 @@
 <br>
 
 <div class="main-left-box">
-<div class="main-left-title">YIIMP STRATUM DIFFICULTY</div>
+<div class="main-left-title">LBRY COMMUNITY POOL STRATUM DIFFICULTY</div>
 <div class="main-left-inner">
 
-<p style="width: 700px;">By default, yiimp will adjust the difficulty of your miner automatically over time until
+<p style="width: 700px;">By default, LBRY Community Pool will adjust the difficulty of your miner automatically over time until
 you have from 5 to 15 submits per minute. It's a good trade off between bandwidth and accuracy.</p>
 
 <p style="width: 700px;">You can also set a fixed custom difficulty using the password parameter. For example,

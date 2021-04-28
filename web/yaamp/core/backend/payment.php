@@ -2,6 +2,9 @@
 
 function BackendPayments()
 {
+	// attempt to increase max execution time limit for the cron job
+	set_time_limit(300);
+
 	$list = getdbolist('db_coins', "enable and id in (select distinct coinid from accounts)");
 	foreach($list as $coin)
 		BackendCoinPayments($coin);
@@ -35,9 +38,8 @@ function BackendCoinPayments($coin)
 	$remote = new WalletRPC($coin);
 
 	$info = $remote->getinfo();
-	if(!$info)
-	{
-		debuglog("$coin->symbol cant connect to coin");
+	if(!$info) {
+		debuglog("payment: can't connect to {$coin->symbol} wallet");
 		return;
 	}
 
@@ -46,13 +48,13 @@ function BackendCoinPayments($coin)
 
 	if(date("w", time()) == 0 && date("H", time()) > 18) { // sunday evening, minimum reduced
 		$min_payout = max($min_payout/10, $txfee);
-		if($coin->symbol == 'DCR') $min_payout = 0.025;
+		if($coin->symbol == 'DCR') $min_payout = 0.01005;
 	}
 
-	$users = getdbolist('db_accounts', "balance>$min_payout and coinid={$coin->id}");
+	$users = getdbolist('db_accounts', "balance>$min_payout AND coinid={$coin->id} ORDER BY balance DESC");
 
 	// todo: enhance/detect payout_max from normal sendmany error
-	if($coin->symbol == 'MUE' || $coin->symbol == 'BOD' || $coin->symbol == 'DIME' || $coin->symbol == 'BTCRY' || !empty($coin->payout_max))
+	if($coin->symbol == 'BOD' || $coin->symbol == 'DIME' || $coin->symbol == 'BTCRY' || !empty($coin->payout_max))
 	{
 		foreach($users as $user)
 		{
@@ -66,16 +68,16 @@ function BackendCoinPayments($coin)
 				$tx = $remote->sendtoaddress($user->username, round($amount, 8));
 				if(!$tx)
 				{
-					debuglog("error $remote->error, $user->username, $amount");
-					if($remote->error == 'transaction too large' || $remote->error == 'invalid amount' || $remote->error == 'insufficient funds' || $remote->error == 'error: transaction creation failed  ')
-					{
+					$error = $remote->error;
+					debuglog("RPC $error, {$user->username}, $amount");
+					if (stripos($error,'transaction too large') !== false || stripos($error,'invalid amount') !== false
+						|| stripos($error,'insufficient funds') !== false || stripos($error,'transaction creation failed') !== false
+					) {
 						$coin->payout_max = min((double) $amount, (double) $coin->payout_max);
 						$coin->save();
-
 						$amount /= 2;
 						continue;
 					}
-
 					break;
 				}
 
@@ -85,6 +87,7 @@ function BackendCoinPayments($coin)
 				$payout->amount = bitcoinvaluetoa($amount);
 				$payout->fee = 0;
 				$payout->tx = $tx;
+				$payout->idcoin = $coin->id;
 				$payout->save();
 
 				$user->balance -= $amount;
@@ -103,6 +106,11 @@ function BackendCoinPayments($coin)
 	{
 		$total_to_pay += round($user->balance, 8);
 		$addresses[$user->username] = round($user->balance, 8);
+		// transaction xxx has too many sigops: 1035 > 1000
+		if ($coin->symbol == 'DCR' && count($addresses) > 990) {
+			debuglog("payment: more than 990 {$coin->symbol} users to pay, limit to top balances...");
+			break;
+		}
 	}
 
 	if(!$total_to_pay)
@@ -161,17 +169,21 @@ function BackendCoinPayments($coin)
 	{
 		$user = getdbo('db_accounts', $user->id);
 		if(!$user) continue;
+		if(!isset($addresses[$user->username])) continue;
+
+		$payment_amount = bitcoinvaluetoa($addresses[$user->username]);
 
 		$payout = new db_payouts;
 		$payout->account_id = $user->id;
 		$payout->time = time();
-		$payout->amount = bitcoinvaluetoa($user->balance*$coef);
+		$payout->amount = $payment_amount;
 		$payout->fee = 0;
+		$payout->idcoin = $coin->id;
 
 		if ($payout->save()) {
 			$payouts[$payout->id] = $user->id;
 
-			$user->balance = bitcoinvaluetoa(floatval($user->balance) - (floatval($user->balance)*$coef));
+			$user->balance = bitcoinvaluetoa(floatval($user->balance) - $payment_amount);
 			$user->save();
 		}
 	}
@@ -222,24 +234,41 @@ function BackendCoinPayments($coin)
 
 	// Search for previous payouts not executed (no tx)
 	$addresses = array(); $payouts = array();
-	$mailmsg = '';
+	$mailmsg = ''; $mailwarn = '';
 	foreach($users as $user)
 	{
 		$amount_failed = 0.0;
 		$failed = getdbolist('db_payouts', "account_id=:uid AND IFNULL(tx,'') = '' ORDER BY time", array(':uid'=>$user->id));
 		if (!empty($failed)) {
+			if ($coin->symbol == 'CHC') {
+				// tx made but payment rpc timed out
+				foreach ($failed as $payout) $amount_failed += floatval($payout->amount);
+				$notice = "payment: Found buggy payout without tx for {$user->username}!! $amount_failed {$coin->symbol}";
+				debuglog($notice);
+				$mailwarn .= "$notice\r\n";
+				continue;
+			}
 			foreach ($failed as $payout) {
 				$amount_failed += floatval($payout->amount);
 				$payout->delete();
 			}
 			if ($amount_failed > 0.0) {
 				debuglog("Found failed payment(s) for {$user->username}, $amount_failed {$coin->symbol}!");
-
+				if ($coin->rpcencoding == 'DCR') {
+					$data = $remote->validateaddress($user->username);
+					if (!$data['isvalid']) {
+						debuglog("Found bad address {$user->username}!! ($amount_failed {$coin->symbol})");
+						$user->is_locked = 1;
+						$user->save();
+						continue;
+					}
+				}
 				$payout = new db_payouts;
 				$payout->account_id = $user->id;
 				$payout->time = time();
 				$payout->amount = $amount_failed;
 				$payout->fee = 0;
+				$payout->idcoin = $coin->id;
 				if ($payout->save() && $amount_failed > $min_payout) {
 					$payouts[$payout->id] = $user->id;
 					$addresses[$user->username] = $amount_failed;
@@ -247,6 +276,12 @@ function BackendCoinPayments($coin)
 				}
 			}
 		}
+	}
+
+	if (!empty($mailwarn)) {
+		send_email_alert('payouts', "{$coin->symbol} payout tx problems to check",
+			"$mailwarn\r\nCheck your wallet recent transactions to know if the payment was made, the RPC call timed out."
+		);
 	}
 
 	// redo failed payouts

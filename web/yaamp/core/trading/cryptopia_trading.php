@@ -27,6 +27,7 @@ function doCryptopiaTrading($quick=false)
 	$savebalance = getdbosql('db_balances', "name='$exchange'");
 	if (is_object($savebalance)) {
 		$savebalance->balance = 0;
+		$savebalance->onsell = 0;
 		$savebalance->save();
 	}
 
@@ -36,6 +37,7 @@ function doCryptopiaTrading($quick=false)
 		if ($balance->Symbol == 'BTC') {
 			if (is_object($savebalance)) {
 				$savebalance->balance = $balance->Available;
+				$savebalance->onsell = $balance->HeldForTrades;
 				$savebalance->save();
 			}
 			continue;
@@ -69,7 +71,7 @@ function doCryptopiaTrading($quick=false)
 	$flushall = rand(0, 8) == 0;
 	if($quick) $flushall = false;
 
-	$min_btc_trade = 0.00001000; // minimum allowed by the exchange
+	$min_btc_trade = exchange_get($exchange, 'min_btc_trade', 0.00050000); // minimum allowed by the exchange
 	$sell_ask_pct = 1.05;        // sell on ask price + 5%
 	$cancel_ask_pct = 1.20;      // cancel order if our price is more than ask price + 20%
 
@@ -86,7 +88,8 @@ function doCryptopiaTrading($quick=false)
 
 		$market = getdbosql('db_markets', "coinid=:coinid AND name='cryptopia'", array(':coinid'=>$coin->id));
 		if(!$market) continue;
-		$market->balance = $balance->HeldForTrades;
+		$market->balance = $balance->Available;
+		$market->ontrade = $balance->HeldForTrades;
 		$market->message = $balance->StatusMessage;
 
 		$orders = NULL;
@@ -245,7 +248,7 @@ function doCryptopiaTrading($quick=false)
 	}
 
 	$withdraw_min = exchange_get($exchange, 'withdraw_min_btc', EXCH_AUTO_WITHDRAW);
-	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0002);
+	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.002);
 
 	// auto withdraw
 	if(is_object($savebalance))

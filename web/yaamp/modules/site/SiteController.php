@@ -5,16 +5,18 @@ class SiteController extends CommonController
 	public $defaultAction='index';
 
 	///////////////////////////////////////////////////
-
+	// Security Note: You can rename this action as you
+	// want, to customize the admin entrance url...
+	//
 	public function actionAdminRights()
 	{
-		$client_ip = $_SERVER['REMOTE_ADDR'];
+		$client_ip = arraySafeVal($_SERVER,'REMOTE_ADDR');
+		$valid = isAdminIP($client_ip);
 
-		$valid = false;
-		if (strpos(YAAMP_ADMIN_IP, ','))
-			$valid = in_array($client_ip, explode(',',YAAMP_ADMIN_IP), true);
-		else
-			$valid = ($client_ip === YAAMP_ADMIN_IP);
+		if (arraySafeVal($_SERVER,'HTTP_X_FORWARDED_FOR','') != '') {
+			debuglog("admin access attempt via IP spoofing!");
+			$valid = false;
+		}
 
 		if ($valid)
 			debuglog("admin connect from $client_ip");
@@ -252,6 +254,7 @@ class SiteController extends CommonController
 				debuglog("sent $amount {$coin->symbol} to bookmark {$bookmark->address}");
 				$bookmark->lastused = time();
 				$bookmark->save();
+				BackendUpdatePoolBalances($coin->id);
 			}
 		}
 
@@ -262,7 +265,7 @@ class SiteController extends CommonController
 
 	public function actionConsole()
 	{
-		if(!$this->admin) return;
+		if(!$this->admin || !YAAMP_ADMIN_WEBCONSOLE) return;
 		$coin = getdbo('db_coins', getiparam('id'));
 		if (!$coin) {
 			$this->goback();
@@ -341,6 +344,8 @@ class SiteController extends CommonController
 		$rule->notifycmd = $_POST['notifycmd'];
 		$rule->description = $_POST['description'];
 		$rule->enabled = 1;
+		$rule->lastchecked = 0; // time
+		$rule->lasttriggered = 0;
 
 		$words = explode(' ', $rule->conditiontype);
 		if (count($words) < 2) {
@@ -352,6 +357,15 @@ class SiteController extends CommonController
 		}
 
 		$this->goback();
+	}
+
+	/////////////////////////////////////////////////
+
+	public function actionBotnets()
+	{
+		if(!$this->admin) return;
+
+		$this->render('botnets');
 	}
 
 	/////////////////////////////////////////////////
@@ -396,24 +410,72 @@ class SiteController extends CommonController
 
 	/////////////////////////////////
 
+	protected function renderPartialAlgoMemcached($partial, $cachetime=15)
+	{
+		$algo = user()->getState('yaamp-algo');
+		$memcache = controller()->memcache->memcache;
+		$memkey = $algo.'_'.str_replace('/','_',$partial);
+		$html = controller()->memcache->get($memkey);
+
+		if (!empty($html)) {
+			echo $html;
+			return;
+		}
+
+		ob_start();
+		ob_implicit_flush(false);
+		$this->renderPartial($partial);
+		$html = ob_get_clean();
+		echo $html;
+
+		controller()->memcache->set($memkey, $html, $cachetime, MEMCACHE_COMPRESSED);
+	}
+
+	// Pool Status : public right panel with all algos and live stats
 	public function actionCurrent_results()
 	{
-		$this->renderPartial('results/current_results');
+		$this->renderPartialAlgoMemcached('results/current_results', 30);
 	}
 
+	// Home Tab : Pool Stats (algo) on the bottom right
 	public function actionHistory_results()
 	{
-		$this->renderPartial('results/history_results');
+		$this->renderPartialAlgoMemcached('results/history_results');
 	}
 
+	// Pool Tab : Top left panel with estimated profit per coin
 	public function actionMining_results()
 	{
-		$this->renderPartial('results/mining_results');
+		if ($this->admin)
+			$this->renderPartial('results/mining_results');
+		else
+			$this->renderPartialAlgoMemcached('results/mining_results');
 	}
 
 	public function actionMiners_results()
 	{
-		$this->renderPartial('results/miners_results');
+		if ($this->admin)
+			$this->renderPartial('results/miners_results');
+		else
+			$this->renderPartialAlgoMemcached('results/miners_results');
+	}
+
+	// Pool tab: graph algo pool hashrate (json data)
+	public function actionGraph_hashrate_results()
+	{
+		$this->renderPartialAlgoMemcached('results/graph_hashrate_results');
+	}
+
+	// Pool tab: graph algo estimate history (json data)
+	public function actionGraph_price_results()
+	{
+		$this->renderPartialAlgoMemcached('results/graph_price_results');
+	}
+
+	// Pool tab: last 50 blocks
+	public function actionFound_results()
+	{
+		$this->renderPartialAlgoMemcached('results/found_results');
 	}
 
 	public function actionWallet_results()
@@ -436,29 +498,14 @@ class SiteController extends CommonController
 		$this->renderPartial('results/graph_earnings_results');
 	}
 
-	public function actionFound_results()
-	{
-		$this->renderPartial('results/found_results');
-	}
-
 	public function actionUser_earning_results()
 	{
 		$this->renderPartial('results/user_earning_results');
 	}
 
-	public function actionGraph_hashrate_results()
-	{
-		$this->renderPartial('results/graph_hashrate_results');
-	}
-
 	public function actionGraph_user_results()
 	{
 		$this->renderPartial('results/graph_user_results');
-	}
-
-	public function actionGraph_price_results()
-	{
-		$this->renderPartial('results/graph_price_results');
 	}
 
 	public function actionGraph_assets_results()
@@ -619,6 +666,36 @@ class SiteController extends CommonController
 		$this->goback();
 	}
 
+	public function actionCancelUsersPayment()
+	{
+		if(!$this->admin) return;
+		$coin = getdbo('db_coins', getiparam('id'));
+		if ($coin) {
+			$amount_failed = 0.0; $cnt = 0;
+			$time = time() - (48 * 3600);
+			$failed = getdbolist('db_payouts', "idcoin=:id AND IFNULL(tx,'') = '' AND time>$time", array(':id'=>$coin->id));
+			if (!empty($failed)) {
+				foreach ($failed as $payout) {
+					$user = getdbo('db_accounts', $payout->account_id);
+					if ($user) {
+						$user->balance += floatval($payout->amount);
+						if ($user->save()) {
+							$amount_failed += floatval($payout->amount);
+							$cnt++;
+						}
+					}
+					$payout->delete();
+				}
+				user()->setFlash('message', "Restored $cnt failed txs to user balances, $amount_failed {$coin->symbol}");
+			} else {
+				user()->setFlash('message', 'No failed txs found');
+			}
+		} else {
+			user()->setFlash('error', 'Invalid coin id!');
+		}
+		$this->goback();
+	}
+
 	/////////////////////////////////////////////////
 
 	public function actionUser()
@@ -673,6 +750,33 @@ class SiteController extends CommonController
 	{
 		if(!$this->admin) return;
 		$this->renderPartial('common_results');
+	}
+
+	/////////////////////////////////////////////////
+
+	public function actionBalances()
+	{
+		if(!$this->admin) return;
+		$this->render('balances');
+	}
+
+	public function actionBalances_results()
+	{
+		if(!$this->admin) return;
+		$this->renderPartial('balances_results');
+	}
+
+	public function actionBalanceUpdate()
+	{
+		if(!$this->admin) return;
+		$id = getiparam('market');
+		$market = getdbo('db_markets', $id);
+		if ($market) {
+			exchange_update_market_by_id($id);
+			$this->redirect(array('/site/balances', 'exch'=>$market->name));
+		} else {
+			$this->goback();
+		}
 	}
 
 	/////////////////////////////////////////////////
@@ -828,22 +932,6 @@ class SiteController extends CommonController
 	//	$this->goback();
 	}
 
-	public function actionSellBalance()
-	{
-		if(!$this->admin) return;
-		$coin = getdbo('db_coins', getiparam('id'));
-		if ($coin) {
-			$amount = getparam('amount');
-			$res = $this->doSellBalance($coin, $amount);
-			if(!$res)
-				$this->redirect('/site/admin');
-			else
-				$this->redirect('/site/exchange');
-			return;
-		}
-		$this->goback();
-	}
-
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 
 	public function actionBanUser()
@@ -923,6 +1011,7 @@ class SiteController extends CommonController
 			BackendBlockFind1($coin->id);
 			BackendBlocksUpdate($coin->id);
 			BackendBlockFind2($coin->id);
+			BackendUpdatePoolBalances($coin->id);
 		}
 		$this->goback();
 	}
@@ -956,24 +1045,12 @@ class SiteController extends CommonController
 	public function actionDeleteExchange()
 	{
 		if(!$this->admin) return;
-
 		$exchange = getdbo('db_exchange', getiparam('id'));
 		if ($exchange) {
-
 			$exchange->status = 'deleted';
 			$exchange->price = 0;
 			$exchange->receive_time = time();
 			$exchange->save();
-
-			/*
-			$unspent = $exchange->quantity;
-			$earnings = getdbolist('db_earnings', "coinid=$exchange->coinid and not cleared order by create_time");
-			foreach($earnings as $earning) {
-				$unspent -= $earning->amount;
-				$earning->delete();
-				if($unspent <= 0) break;
-			}
-			*/
 		}
 		$this->goback();
 	}
@@ -1000,7 +1077,7 @@ class SiteController extends CommonController
 		$this->goback();
 	}
 
-    public function actionCancelorder()
+	public function actionCancelorder()
 	{
 		if(!$this->admin) return;
 		$order = getdbo('db_orders', getiparam('id'));
@@ -1014,7 +1091,7 @@ class SiteController extends CommonController
 
 	public function actionAlgo()
 	{
-		$algo = substr(getparam('algo'), 0, 32);
+		$algo = getalgoparam();
 		$a = getdbosql('db_algos', "name=:name", array(':name'=>$algo));
 
 		if($a)
@@ -1031,7 +1108,10 @@ class SiteController extends CommonController
 
 	public function actionGomining()
 	{
-		$algo = substr(getparam('algo'), 0, 32);
+		$algo = getalgoparam();
+		if ($algo == 'all') {
+			return;
+		}
 		user()->setState('yaamp-algo', $algo);
 		$this->redirect("/site/mining");
 	}
@@ -1110,18 +1190,6 @@ class SiteController extends CommonController
 	{
 		debuglog(__METHOD__);
 		setcookie('mainbtc', '1', time()+60*60*24, '/');
-	}
-
-	public function actionTest()
-	{
-		if(!$this->admin) return;
-
-		debuglog("action test");
-
-		$ticker = jubi_api_query('ticker', "?coin=sak");
-		debuglog($ticker);
-
-		debuglog("action test end");
 	}
 
 }

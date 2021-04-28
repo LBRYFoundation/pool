@@ -35,6 +35,9 @@ span.block.new       { color: white; background-color: #ad4ef0; }
 span.block.orphan    { color: white; background-color: #d9534f; }
 span.block.immature  { color: white; background-color: #f0ad4e; }
 span.block.confirmed { color: white; background-color: #5cb85c; }
+b.row a { font-size: 10pt; }
+.ssrow td.row { font-size: .8em; }
+td.right { text-align: right; }
 </style>
 
 <table class="dataGrid2">
@@ -61,17 +64,17 @@ foreach($db_blocks as $db_block)
 
 		$reward = bitcoinvaluetoa($db_block->amount);
 
-		echo "<tr class='ssrow'>";
-		echo "<td width=18><img width=16 src='/images/btc.png'></td>";
-		echo "<td><b>Rental</b><span style='font-size: .8em'> ($db_block->algo)</span></td>";
-		echo "<td align=right style='font-size: .8em'><b>$reward BTC</b></td>";
-		echo "<td align=right style='font-size: .8em'></td>";
-		echo "<td align=right style='font-size: .8em'></td>";
-		echo "<td align=right style='font-size: .8em'>$d ago</td>";
-		echo "<td align=right style='font-size: .8em'>";
-		echo "<span style='padding: 2px; color: white; background-color: #5cb85c'>Confirmed</span>";
-		echo "</td>";
-		echo "</tr>";
+		echo '<tr class="ssrow">';
+		echo '<td width="18px"><img width="16px" src="/images/btc.png"/></td>';
+		echo '<td class="row"><b>Rental</b> ('.$db_block->algo.')</td>';
+		echo '<td class="row right"><b>'.$reward.' BTC</b></td>';
+		echo '<td class="row right"></td>';
+		echo '<td class="row right"></td>';
+		echo '<td class="row right">'.$d.' ago</td>';
+		echo '<td class="row right">';
+		echo '<span class="block confirmed">Confirmed</span>';
+		echo '</td>';
+		echo '</tr>';
 
 		continue;
 	}
@@ -83,21 +86,28 @@ foreach($db_blocks as $db_block)
 
 	$link = $coin->createExplorerLink($coin->name, array('hash'=>$db_block->blockhash));
 
+	$flags = $db_block->segwit ? '&nbsp;<img src="/images/ui/segwit.png" height="8px" valign="center" title="segwit"/>' : '';
+
 	echo '<tr class="ssrow">';
-	echo '<td width="18"><img width="16" src="'.$coin->image.'"></td>';
-	echo "<td><b>$link</b><span style='font-size: .8em'> ($coin->algo)</span></td>";
-	echo "<td align=right style='font-size: .8em'><b>$reward $coin->symbol_show</b></td>";
-	echo "<td align=right style='font-size: .8em' title='found $db_block->difficulty_user'>$difficulty</td>";
-	echo "<td align=right style='font-size: .8em'>$height</td>";
-	echo "<td align=right style='font-size: .8em'>$d ago</td>";
-	echo "<td align=right style='font-size: .8em'>";
+	echo '<td width="18px"><img width="16px" src="'.$coin->image.'"></td>';
+	echo '<td class="row"><b class="row">'.$link.'</b> ('.$db_block->algo.')'.$flags.'</td>';
+	echo '<td class="row right"><b>'.$reward.' '.$coin->symbol_show.'</b></td>';
+	echo '<td class="row right" title="found '.$db_block->difficulty_user.'">'.$difficulty.'</td>';
+	echo '<td class="row right">'.$height.'</td>';
+	echo '<td class="row right">'.$d.' ago</td>';
+	echo '<td class="row right">';
 
 	if($db_block->category == 'orphan')
 		echo '<span class="block orphan">Orphan</span>';
 
-	else if($db_block->category == 'immature')
-		echo '<span class="block immature">Immature ('.$db_block->confirmations.')</span>';
-
+	else if($db_block->category == 'immature') {
+		$eta = '';
+		if ($coin->block_time && $coin->mature_blocks) {
+			$t = (int) ($coin->mature_blocks - $db_block->confirmations) * $coin->block_time;
+			$eta = "ETA: ".sprintf('%dh %02dmn', ($t/3600), ($t/60)%60);
+		}
+		echo '<span class="block immature" title="'.$eta.'">Immature ('.$db_block->confirmations.')</span>';
+	}
 	else if($db_block->category == 'generate')
 		echo '<span class="block confirmed">Confirmed</span>';
 

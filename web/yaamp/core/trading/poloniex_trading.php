@@ -33,7 +33,8 @@ function doPoloniexTrading()
 	{
 		if ($symbol == 'BTC') {
 			if (is_object($savebalance)) {
-				$savebalance->balance = $balance['available'];
+				$savebalance->balance = arraySafeVal($balance,'available');
+				$savebalance->onsell = arraySafeVal($balance,'onOrders');
 				$savebalance->save();
 			}
 			continue;
@@ -155,6 +156,7 @@ function doPoloniexTrading()
 
 	// add orders
 
+	if (is_array($balances))
 	foreach($balances as $symbol=>$balance)
 	{
 		if(!$balance || !arraySafeVal($balance,'available')) continue;
@@ -208,7 +210,7 @@ function doPoloniexTrading()
 	}
 
 	$withdraw_min = exchange_get($exchange, 'withdraw_min_btc', EXCH_AUTO_WITHDRAW);
-	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0002);
+	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0001);
 
 	if(is_object($savebalance))
 	if(floatval($withdraw_min) > 0 && $savebalance->balance >= ($withdraw_min + $withdraw_fee))

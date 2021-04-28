@@ -1,7 +1,7 @@
 <br>
 
 <div class="main-left-box">
-<div class="main-left-title">YIIMP API</div>
+<div class="main-left-title">LBRY COMMUNITY POOL API</div>
 <div class="main-left-inner">
 
 <p>Simple REST API.</p>
@@ -10,7 +10,7 @@
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/wallet?address=<b>WALLET_ADDRESS</b></p>
+	http://<?=YAAMP_API_URL?>/api/wallet?address=<b>WALLET_ADDRESS</b></p>
 
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
@@ -18,14 +18,14 @@ result:
 	"unsold": 0.00050362,
 	"balance": 0.00000000,
 	"unpaid": 0.00050362,
-	"paid": 0.00000000,
+	"paid24h": 0.00000000,
 	"total": 0.00050362
 }
 </pre>
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-        http://<?=YAAMP_SITE_URL?>/api/walletEx?address=<b>WALLET_ADDRESS</b></p>
+        http://<?=YAAMP_API_URL?>/api/walletEx?address=<b>WALLET_ADDRESS</b></p>
 
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
@@ -33,7 +33,7 @@ result:
 	"unsold": 0.00050362,
 	"balance": 0.00000000,
 	"unpaid": 0.00050362,
-	"paid": 0.00000000,
+	"paid24h": 0.00000000,
 	"total": 0.00050362,
 	"miners":[{
 		"version": "ccminer\/1.8.2",
@@ -45,15 +45,24 @@ result:
 		"accepted": 82463372.083,
 		"rejected": 0
 	}]
+<?php if (YAAMP_API_PAYOUTS) : ?>
+	,"payouts":[{
+		"time": 1529860641,
+		"amount": "0.001",
+		"tx": "transaction_id_of_the_payout"
+	}]
+<?php endif; ?>
 }
 </pre>
-
-
+<?php
+if (YAAMP_API_PAYOUTS)
+	echo "Payouts of the last ".(YAAMP_API_PAYOUTS_PERIOD / 3600)." hours are displayed, please use a block explorer to see all payouts.";
+?>
 <p><b>Pool Status</b></p>
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/status</p>
+	http://<?=YAAMP_API_URL?>/api/status</p>
 
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
@@ -68,6 +77,7 @@ result:
 		"estimate_current": "0.00053653",
 		"estimate_last24h": "0.00036408",
 		"actual_last24h": "0.00035620",
+		"hashrate_last24h": 269473000,
 		"rental_current": "3.61922463"
 	},
 
@@ -78,21 +88,23 @@ result:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/currencies</p>
+	http://<?=YAAMP_API_URL?>/api/currencies</p>
 
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
 {
-	"AMBER": {
-		"algo": "x13",
-		"port": 3633,
-		"name": "AmberCoin",
-		"height": 1349673,
-		"workers": 0,
-		"shares": 1,
-		"hashrate": 0,
-		"lastblock": 1347605,
-		"timesincelast": 56337
+	"BTX": {
+		"algo": "bitcore",
+		"port": 3556,
+		"name": "BitCore",
+		"height": 18944,
+		"workers": 181,
+		"shares": 392,
+		"hashrate": 7267227499,
+		"24h_blocks": 329,
+		"24h_btc": 0.54471295,
+		"lastblock": 18945,
+		"timesincelast": 67
 	},
 
 	...
@@ -105,7 +117,7 @@ result:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/rental?key=API_KEY</p>
+	http://<?=YAAMP_API_URL?>/api/rental?key=API_KEY</p>
 
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
@@ -142,7 +154,7 @@ result:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/rental_price?key=API_KEY&jobid=xx&price=xx</p>
+	http://<?=YAAMP_API_URL?>/api/rental_price?key=API_KEY&jobid=xx&price=xx</p>
 
 </pre>
 
@@ -152,7 +164,7 @@ request:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/rental_hashrate?key=API_KEY&jobid=xx&hashrate=xx</p>
+	http://<?=YAAMP_API_URL?>/api/rental_hashrate?key=API_KEY&jobid=xx&hashrate=xx</p>
 
 </pre>
 
@@ -160,7 +172,7 @@ request:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/rental_start?key=API_KEY&jobid=xx</p>
+	http://<?=YAAMP_API_URL?>/api/rental_start?key=API_KEY&jobid=xx</p>
 
 </pre>
 
@@ -168,7 +180,7 @@ request:
 
 request:
 <p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
-	http://<?=YAAMP_SITE_URL?>/api/rental_stop?key=API_KEY&jobid=xx</p>
+	http://<?=YAAMP_API_URL?>/api/rental_stop?key=API_KEY&jobid=xx</p>
 
 </pre>
 

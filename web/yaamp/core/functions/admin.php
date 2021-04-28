@@ -6,6 +6,7 @@ function getAdminSideBarLinks()
 {
 $links = <<<end
 <a href="/site/exchange">Exchanges</a>&nbsp;
+<a href="/site/botnets">Botnets</a>&nbsp;
 <a href="/site/user">Users</a>&nbsp;
 <a href="/site/worker">Workers</a>&nbsp;
 <a href="/site/version">Version</a>&nbsp;
@@ -23,8 +24,9 @@ function getAdminWalletLinks($coin, $info=NULL, $src='wallet')
 	if($info) {
 		$html .= ' || '.$coin->createExplorerLink("<b>EXPLORER</b>");
 		$html .= ' || '.CHtml::link("<b>PEERS</b>", '/site/peers?id='.$coin->id);
-		$html .= ' || '.CHtml::link("<b>CONSOLE</b>", '/site/console?id='.$coin->id);
-		$html .= ' || '.CHtml::link("<b>TRIGGER</b>", '/site/triggers?id='.$coin->id);
+		if (YAAMP_ADMIN_WEBCONSOLE)
+			$html .= ' || '.CHtml::link("<b>CONSOLE</b>", '/site/console?id='.$coin->id);
+		$html .= ' || '.CHtml::link("<b>TRIGGERS</b>", '/site/triggers?id='.$coin->id);
 		if ($src != 'wallet')
 			$html .= ' || '.CHtml::link("<b>{$coin->symbol}</b>", '/site/coin?id='.$coin->id);
 	}
@@ -48,9 +50,41 @@ function getAdminWalletLinks($coin, $info=NULL, $src='wallet')
 	if(!empty($coin->link_site))
 		$html .= CHtml::link('site', $coin->link_site, array('target'=>'_blank')).' ';
 
+	if(!empty($coin->link_explorer))
+		$html .= CHtml::link('chain', $coin->link_explorer, array('target'=>'_blank','title'=>'External Blockchain Explorer')).' ';
+
 	$html .= CHtml::link('google', 'http://google.com/search?q='.urlencode($coin->name.' '.$coin->symbol.' bitcointalk'), array('target'=>'_blank'));
 
 	return $html;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+// Check if $IP is in $CIDR range
+function ipCIDRCheck($IP, $CIDR)
+{
+	list($net, $mask) = explode('/', $CIDR);
+
+	$ip_net = ip2long($net);
+	$ip_mask = ~((1 << (32 - $mask)) - 1);
+
+	$ip_ip = ip2long($IP);
+	$ip_ip_net = $ip_ip & $ip_mask;
+
+	return ($ip_ip_net === $ip_net);
+}
+
+function isAdminIP($ip)
+{
+	foreach(explode(',', YAAMP_ADMIN_IP) as $range)
+	{
+		if (strpos($range, '/')) {
+			if(ipCIDRCheck($ip, $range) === true) return true;
+		} else if ($range === $ip) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////

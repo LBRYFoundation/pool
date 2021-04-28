@@ -68,17 +68,17 @@ YAAMP_JOB_TEMPLATE *coind_create_template_memorypool(YAAMP_COIND *coind)
 
 	json_value_free(json);
 
-	json = rpc_call(&coind->rpc, "getinfo", "[]");
+	json = rpc_call(&coind->rpc, "getmininginfo", "[]");
 	if(!json || json->type == json_null)
 	{
-		coind_error(coind, "coind_getinfo");
+		coind_error(coind, "coind getmininginfo");
 		return NULL;
 	}
 
 	json_result = json_get_object(json, "result");
 	if(!json_result || json_result->type == json_null)
 	{
-		coind_error(coind, "coind_getinfo");
+		coind_error(coind, "coind getmininginfo");
 		json_value_free(json);
 
 		return NULL;
@@ -114,7 +114,8 @@ static int decred_parse_header(YAAMP_JOB_TEMPLATE *templ, const char *header_hex
 		uint32_t size;
 		uint32_t ntime;
 		uint32_t nonce;
-		unsigned char extra[36];
+		unsigned char extra[32];
+		uint32_t stakever;
 		uint32_t hashtag[3];
 	} header;
 
@@ -195,7 +196,8 @@ retry:
 	// bypass coinbase and merkle for now... send without nonce/extradata
 	const unsigned char *hdr = (unsigned char *) &templ->header[36];
 	hexlify(templ->coinb1, hdr, 192 - 80);
-	strcpy(templ->coinb2, "");
+	const unsigned char *sfx = (unsigned char *) &templ->header[176];
+	hexlify(templ->coinb2, sfx, 180 - 176); // stake version
 
 	vector<string> txhashes;
 	txhashes.push_back("");
@@ -231,8 +233,8 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	if(coind->usememorypool)
 		return coind_create_template_memorypool(coind);
 
-	char params[4*1024] = "[{}]";
-	if(!strcmp(coind->symbol, "PPC")) strcpy(params, "[]");
+	char params[512] = "[{}]";
+	if(g_stratum_segwit) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
 
 	json_value *json = rpc_call(&coind->rpc, "getblocktemplate", params);
 	if(!json || json_is_null(json))
@@ -251,6 +253,26 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		coind_error(coind, "getblocktemplate result");
 		json_value_free(json);
 		return NULL;
+	}
+
+	// segwit rule
+	json_value *json_rules = json_get_array(json_result, "rules");
+	if(json_rules && !strlen(coind->witness_magic) && json_rules->u.array.length) {
+		for (int i=0; i<json_rules->u.array.length; i++) {
+			json_value *val = json_rules->u.array.values[i];
+			if(!strcmp(val->u.string.ptr, "segwit")) {
+				const char *commitment = json_get_string(json_result, "default_witness_commitment");
+				strcpy(coind->witness_magic, "aa21a9ed");
+				if (commitment && strlen(commitment) > 12) {
+					strncpy(coind->witness_magic, &commitment[4], 8);
+					coind->witness_magic[8] = '\0';
+				}
+				coind->usesegwit |= g_stratum_segwit;
+				if (coind->usesegwit)
+					debuglog("%s segwit enabled, magic %s\n", coind->symbol, coind->witness_magic);
+				break;
+			}
+		}
 	}
 
 	json_value *json_tx = json_get_array(json_result, "transactions");
@@ -310,6 +332,18 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 		}
 	}
 
+	const char *sc_root = json_get_string(json_result, "stateroot");
+	const char *sc_utxo = json_get_string(json_result, "utxoroot");
+	if (sc_root && sc_utxo) {
+		// LUX Smart Contracts, 144-bytes block headers
+		strcpy(&templ->extradata_hex[ 0], sc_root); // 32-bytes hash (64 in hexa)
+		strcpy(&templ->extradata_hex[64], sc_utxo); // 32-bytes hash too
+
+		// same weird byte order as previousblockhash field
+		ser_string_be2(sc_root, &templ->extradata_be[ 0], 8);
+		ser_string_be2(sc_utxo, &templ->extradata_be[64], 8);
+	}
+
 	if (strcmp(coind->rpcencoding, "DCR") == 0) {
 		decred_fix_template(coind, templ, json_result);
 	}
@@ -353,26 +387,96 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	//////////////////////////////////////////////////////////////////////////////////////////
 
 	vector<string> txhashes;
+	vector<string> txids;
 	txhashes.push_back("");
+	txids.push_back("");
+
+	templ->has_segwit_txs = false;
+
+	templ->has_filtered_txs = false;
+	templ->filtered_txs_fee = 0;
 
 	for(int i = 0; i < json_tx->u.array.length; i++)
 	{
 		const char *p = json_get_string(json_tx->u.array.values[i], "hash");
+		char hash_be[256] = { 0 };
 
-		char hash_be[1024];
-		memset(hash_be, 0, 1024);
+		if (templ->has_filtered_txs) {
+			templ->filtered_txs_fee += json_get_int(json_tx->u.array.values[i], "fee");
+			continue;
+		}
+
 		string_be(p, hash_be);
-
 		txhashes.push_back(hash_be);
+
+		const char *txid = json_get_string(json_tx->u.array.values[i], "txid");
+		if(txid && strlen(txid)) {
+			char txid_be[256] = { 0 };
+			string_be(txid, txid_be);
+			txids.push_back(txid_be);
+			if (strcmp(hash_be, txid_be)) {
+				templ->has_segwit_txs = true; // if not, its useless to generate a segwit block, bigger
+			}
+		} else {
+			templ->has_segwit_txs = false; // force disable if not supported (no txid fields)
+		}
 
 		const char *d = json_get_string(json_tx->u.array.values[i], "data");
 		templ->txdata.push_back(d);
+
+		// if wanted, we can limit the count of txs to include
+		if (g_limit_txs_per_block && i >= g_limit_txs_per_block-2) {
+			debuglog("limiting block to %d first txs (of %d)\n", g_limit_txs_per_block, json_tx->u.array.length);
+			templ->has_filtered_txs = true;
+		}
 	}
 
-	templ->txmerkles[0] = 0;
-	templ->txcount = txhashes.size();
-	templ->txsteps = merkle_steps(txhashes);
+	if (templ->has_filtered_txs) {
+		// coinbasevalue is a total with all tx fees, need to reduce it if some are skipped
+		templ->value -= templ->filtered_txs_fee;
+	}
+
+	templ->txmerkles[0] = '\0';
+	if(templ->has_segwit_txs) {
+		templ->txcount = txids.size();
+		templ->txsteps = merkle_steps(txids);
+	} else {
+		templ->txcount = txhashes.size();
+		templ->txsteps = merkle_steps(txhashes);
+	}
+
+	if(templ->has_segwit_txs) {
+		// * We compute the witness hash (which is the hash including witnesses) of all the block's transactions, except the
+		//   coinbase (where 0x0000....0000 is used instead).
+		// * The coinbase scriptWitness is a stack of a single 32-byte vector, containing a witness nonce (unconstrained).
+		// * We build a merkle tree with all those witness hashes as leaves (similar to the hashMerkleRoot in the block header).
+		// * There must be at least one output whose scriptPubKey is a single 36-byte push, the first 4 bytes (magic) of which are
+		//   {0xaa, 0x21, 0xa9, 0xed}, and the following 32 bytes are SHA256^2(witness root, witness nonce). In case there are
+		/*
+		char bin[YAAMP_HASHLEN_BIN*2];
+		char witness[128] = { 0 };
+		vector<string> mt_verify = merkle_steps(txhashes);
+		string witness_mt = merkle_with_first(mt_verify, "0000000000000000000000000000000000000000000000000000000000000000");
+		mt_verify.clear();
+		witness_mt = witness_mt + "0000000000000000000000000000000000000000000000000000000000000000";
+
+		binlify((unsigned char *)bin, witness_mt.c_str());
+		sha256_double_hash_hex(bin, witness, YAAMP_HASHLEN_BIN*2);
+
+		int clen = (int) (strlen(coind->witness_magic) + strlen(witness)); // 4 + 32 = 36 = 0x24
+		sprintf(coind->commitment, "6a%02x%s%s", clen/2, coind->witness_magic, witness);
+		*/
+		// default commitment is already computed correctly
+		const char *commitment = json_get_string(json_result, "default_witness_commitment");
+		if (commitment) {
+			sprintf(coind->commitment, "%s", commitment);
+		} else {
+			templ->has_segwit_txs = false;
+		}
+	}
+
 	txhashes.clear();
+	txids.clear();
 
 	vector<string>::const_iterator i;
 	for(i = templ->txsteps.begin(); i != templ->txsteps.end(); ++i)

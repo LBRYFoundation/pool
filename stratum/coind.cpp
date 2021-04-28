@@ -98,7 +98,7 @@ bool coind_validate_user_address(YAAMP_COIND *coind, char* const address)
 	}
 
 	bool isvalid = json_get_bool(json_result, "isvalid");
-	if(!isvalid) stratumlog("%s user address %s is not valid.\n", coind->name, address);
+	if(!isvalid) stratumlog("%s: %s user address %s is not valid.\n", g_stratum_algo, coind->symbol, address);
 
 	json_value_free(json);
 
@@ -114,7 +114,12 @@ bool coind_validate_address(YAAMP_COIND *coind)
 	char params[YAAMP_SMALLBUFSIZE];
 	sprintf(params, "[\"%s\"]", coind->wallet);
 
-	json_value *json = rpc_call(&coind->rpc, "validateaddress", params);
+	json_value *json;
+	bool getaddressinfo = ((strcmp(coind->symbol,"DGB") == 0) || (strcmp(coind->symbol2, "DGB") == 0));
+	if(getaddressinfo)
+		json = rpc_call(&coind->rpc, "getaddressinfo", params);
+	else
+		json = rpc_call(&coind->rpc, "validateaddress", params);
 	if(!json) return false;
 
 	json_value *json_result = json_get_object(json, "result");
@@ -124,11 +129,12 @@ bool coind_validate_address(YAAMP_COIND *coind)
 		return false;
 	}
 
-	bool isvalid = json_get_bool(json_result, "isvalid");
+	bool isvalid = getaddressinfo || json_get_bool(json_result, "isvalid");
 	if(!isvalid) stratumlog("%s wallet %s is not valid.\n", coind->name, coind->wallet);
 
 	bool ismine = json_get_bool(json_result, "ismine");
 	if(!ismine) stratumlog("%s wallet %s is not mine.\n", coind->name, coind->wallet);
+	else isvalid = ismine;
 
 	const char *p = json_get_string(json_result, "pubkey");
 	strcpy(coind->pubkey, p ? p : "");
@@ -136,8 +142,23 @@ bool coind_validate_address(YAAMP_COIND *coind)
 	const char *acc = json_get_string(json_result, "account");
 	if (acc) strcpy(coind->account, acc);
 
+	if (!base58_decode(coind->wallet, coind->script_pubkey))
+		stratumlog("Warning: unable to decode %s %s script pubkey\n", coind->symbol, coind->wallet);
+
+	coind->p2sh_address = json_get_bool(json_result, "isscript");
+
+	// if base58 decode fails
+	if (!strlen(coind->script_pubkey)) {
+		const char *pk = json_get_string(json_result, "scriptPubKey");
+		if (pk && strlen(pk) > 10) {
+			strcpy(coind->script_pubkey, &pk[6]);
+			coind->script_pubkey[strlen(pk)-6-4] = '\0';
+			stratumlog("%s %s extracted script pubkey is %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
+		} else {
+			stratumlog("%s wallet addr '%s' seems incorrect!'", coind->symbol, coind->wallet);
+		}
+	}
 	json_value_free(json);
-	base58_decode(coind->wallet, coind->script_pubkey);
 
 	return isvalid && ismine;
 }
@@ -152,7 +173,6 @@ void coind_init(YAAMP_COIND *coind)
 	strcpy(account, coind->account);
 	if(!strcmp(coind->rpcencoding, "DCR")) {
 		coind->usegetwork = true;
-		//coind->noblocknotify = true;
 		//sprintf(account, "default");
 	}
 
@@ -234,8 +254,6 @@ void coind_terminate(YAAMP_COIND *coind)
 //	CommonLock(&coind->mutex);
 //	while(!coind->deleted)
 //	{
-//		debuglog("calling coind_getinfo %s\n", coind->symbol);
-
 //		job_create_last(coind, true);
 //		pthread_cond_wait(&coind->cond, &coind->mutex);
 //	}

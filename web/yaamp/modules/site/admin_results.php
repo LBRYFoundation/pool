@@ -1,5 +1,13 @@
 <?php
 
+function valuetocell($amount) {
+	$html = $amount ? bitcoinvaluetoa($amount) : '-';
+	//$html = rtrim($html,'0');
+	//$html = rtrim($html,'.');
+	$html = preg_replace('/([0]+)$/', '<span class="eov">${1}</span>', $html);
+	return $html;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////
 
 echo <<<end
@@ -9,6 +17,7 @@ th.status, td.status { min-width: 28px; max-width: 48px; text-align: center; }
 td.status { font-family: monospace; font-size: 9pt; letter-spacing: 3px; }
 td.status span.progress { font-size: .8em; letter-spacing: 0; }
 td.status span.hidden { visibility: hidden; }
+span.eov { opacity: 0.5; }
 </style>
 end;
 
@@ -32,15 +41,15 @@ echo <<<end
 
 <th data-sorter="text">Name</th>
 <th data-sorter="text">Server</th>
-<th data-sorter="currency" align="right">Diff/Height</th>
-<th data-sorter="currency" align="right">Profit</th>
-<!--<th data-sorter="currency" align="right">Stake/BTC</th>-->
-<th data-sorter="currency" align="right">Owed/BTC</th>
-<th data-sorter="currency" align="right">Balance/Mint</th>
-<th data-sorter="currency" align="right">Price</th>
+<th data-sorter="currency" align="right">Difficulty<br/>Height</th>
+<th data-sorter="currency" align="right" title="mBTC profit. shown in mining status">Profit<br/>Pool Net</th>
+<th data-sorter="currency" align="right">Bid Price<br/>Ask Price</th>
+<!--<th data-sorter="currency" align="right">Stake<br/>BTC</th>-->
+<th data-sorter="currency" align="right">Immature<br/>Cleared</th>
+<th data-sorter="currency" align="right">Balance<br/>Available</th>
 <th data-sorter="currency" align="right">BTC</th>
 <th data-sorter="currency" align="right">USD</th>
-<th data-sorter="currency" align="right">Win/Market</th>
+<th data-sorter="currency" align="right">Win<br/>Market</th>
 
 </tr>
 </thead><tbody>
@@ -127,29 +136,12 @@ foreach($coins as $coin)
 // 	echo "<td align=right style='font-size: .9em'>$network_ttf<br>$actual_ttf</td>";
 // 	echo "<td align=right style='font-size: .9em'>$pool_ttf<br></td>";
 
+	echo '<td align="right" style="font-size: .9em;" title="Pool % of last 100 net blocks">';
 	if($ss1 > 50)
-		echo '<td align="right" style="font-size: .9em;"><b>'.$btcmhd.'</b><br/><span class="blue">'.$percent_pool1.'</span>';
+		echo '<b>'.$btcmhd.'</b><br/><span class="blue">'.$percent_pool1.'</span>';
 	else
-		echo '<td align="right" style="font-size: .9em;"><b>'.$btcmhd.'</b><br/>'.$percent_pool1;
-
-	echo '<span class="red"> '.$percent_pool2.'</span></td>';
-
-//	$stakebtc = bitcoinvaluetoa($coin->stake*$coin->price);
-//	if ($coin->stake)
-//		echo '<td align="right" style="font-size: .9em;">'.$coin->stake.'<br/>'.$stakebtc.'</td>';
-//	else
-//		echo '<td></td>';
-
-	$owed = (double) dboscalar("SELECT sum(balance) FROM accounts WHERE coinid={$coin->id}");
-	$owed_btc = bitcoinvaluetoa($owed*$coin->price);
-	$owed_data = $owed ? bitcoinvaluetoa($owed).'<br/>'.bitcoinvaluetoa($owed_btc) : '';
-
-	if($coin->balance+$coin->mint < $owed)
-		echo '<td align="right" style="font-size: .9em;"><span class="red">'.$owed_data.'</span></td>';
-	else
-		echo '<td align="right" style="font-size: .9em;">'.$owed_data.'</td>';
-
-	echo '<td align="right" style="font-size: .9em;">'.$coin->balance.'<br/>'.$coin->mint.'</td>';
+		echo '<b>'.$btcmhd.'</b><br/>'.$percent_pool1;
+	echo '<span class="red" title="orphans"> '.$percent_pool2.'</span></td>';
 
 	$price = bitcoinvaluetoa($coin->price);
 	$price2 = bitcoinvaluetoa($coin->price2);
@@ -159,13 +151,29 @@ foreach($coins as $coin)
 	else
 		echo "<td align=right style='font-size: .9em'>$price<br>$price2</td>";
 
+//	$stakebtc = bitcoinvaluetoa($coin->stake*$coin->price);
+//	if ($coin->stake)
+//		echo '<td align="right" style="font-size: .9em;">'.$coin->stake.'<br/>'.$stakebtc.'</td>';
+//	else
+//		echo '<td></td>';
+
+	$cell = valuetocell($coin->mint).'<br/>'.valuetocell($coin->cleared);
+
+	if($coin->balance+$coin->mint < $coin->cleared)
+		echo '<td align="right" style="font-size: .9em;"><span class="red">'.$cell.'</span></td>';
+	else
+		echo '<td align="right" style="font-size: .9em;">'.$cell.'</td>';
+
+	$cell = valuetocell($coin->balance).'<br/>'.valuetocell($coin->available);
+	echo '<td align="right" style="font-size: .9em;">'.$cell.'</td>';
+
 	$btc = bitcoinvaluetoa($coin->balance * $coin->price);
-	$mint = bitcoinvaluetoa($coin->mint * $coin->price);
-	echo '<td align="right" style="font-size: .9em;">'.$btc.'<br/>'.$mint.'</td>';
+	$available = bitcoinvaluetoa($coin->available * $coin->price);
+	echo '<td align="right" style="font-size: .9em;">'.$btc.'<br/>'.$available.'</td>';
 
 	$fiat = round($coin->balance * $coin->price * $mining->usdbtc, 2). ' $';
-	$mint = round($coin->mint * $coin->price * $mining->usdbtc, 2). ' $';
-	echo '<td align="right" style="font-size: .9em;">'.$fiat.'<br/>'.$mint.'</td>';
+	$available = round($coin->available * $coin->price * $mining->usdbtc, 2). ' $';
+	echo '<td align="right" style="font-size: .9em;">'.$fiat.'<br/>'.$available.'</td>';
 
 	$marketname = '';
 	$bestmarket = getBestMarket($coin);

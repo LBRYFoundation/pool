@@ -11,6 +11,29 @@ void db_check_user_input(char* input)
 	}
 }
 
+void db_check_coin_symbol(YAAMP_DB *db, char* symbol)
+{
+	if (!symbol) return;
+	size_t len = strlen(symbol);
+	if (len >= 2 && len <= 12) {
+#ifdef NO_EXCHANGE
+		db_query(db, "SELECT symbol FROM coins WHERE installed AND algo='%s' AND symbol='%s'", g_stratum_algo, symbol);
+#else
+		db_query(db, "SELECT symbol FROM coins WHERE installed AND (symbol='%s' OR symbol2='%s')", symbol, symbol);
+#endif
+		MYSQL_RES *result = mysql_store_result(&db->mysql);
+		*symbol = '\0';
+		if (!result) return;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			strcpy(symbol, row[0]);
+		}
+		mysql_free_result(result);
+	} else {
+		*symbol = '\0';
+	}
+}
+
 void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 {
 	db_clean_string(db, client->username);
@@ -75,6 +98,7 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 	mysql_free_result(result);
 
 	db_check_user_input(symbol);
+	db_check_coin_symbol(db, symbol);
 
 	if (gift < 0) gift = 0;
 	client->donation = gift;
@@ -84,13 +108,21 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 
 	else if(client->userid == 0 && strlen(client->username) >= MIN_ADDRESS_LEN)
 	{
-		db_query(db, "INSERT INTO accounts (username, coinsymbol, balance, donation) values ('%s', '%s', 0, %d)",
-			client->username, symbol, gift);
+		db_query(db, "INSERT INTO accounts (username, coinsymbol, balance, donation, hostaddr) values ('%s', '%s', 0, %d, '%s')",
+			client->username, symbol, gift, client->sock->ip);
 		client->userid = (int)mysql_insert_id(&db->mysql);
 	}
 
-	else
-		db_query(db, "UPDATE accounts SET coinsymbol='%s', donation=%d WHERE id=%d", symbol, gift, client->userid);
+	else {
+		db_query(db, "UPDATE accounts SET coinsymbol='%s', swap_time=%u, donation=%d, hostaddr='%s' WHERE id=%d AND balance = 0"
+			" AND (SELECT COUNT(id) FROM payouts WHERE account_id=%d AND tx IS NULL) = 0" // failed balance
+			" AND (SELECT pending FROM balanceuser WHERE userid=%d ORDER by time DESC LIMIT 1) = 0" // pending balance
+			, symbol, (uint) time(NULL), gift, client->sock->ip, client->userid, client->userid, client->userid);
+		if (mysql_affected_rows(&db->mysql) > 0 && strlen(symbol)) {
+			debuglog("%s: %s coinsymbol set to %s ip %s uid (%d)\n",
+				g_current_algo->name, client->username, symbol, client->sock->ip, client->userid);
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -106,19 +138,34 @@ void db_clear_worker(YAAMP_DB *db, YAAMP_CLIENT *client)
 
 void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client)
 {
-	db_clear_worker(db, client);
+	char password[128] = { 0 };
+	char version[128] = { 0 };
+	char worker[128] = { 0 };
 	int now = time(NULL);
 
-	/* maybe not required here (already made), but... */
+	db_clear_worker(db, client);
+
 	db_check_user_input(client->username);
 	db_check_user_input(client->version);
 	db_check_user_input(client->password);
 	db_check_user_input(client->worker);
 
+	// strip for recent mysql defaults (error if fields are too long)
+	if (strlen(client->password) > 64)
+		clientlog(client, "password too long truncated: %s", client->password);
+	if (strlen(client->version) > 64)
+		clientlog(client, "version too long truncated: %s", client->version);
+	if (strlen(client->worker) > 64)
+		clientlog(client, "worker too long truncated: %s", client->worker);
+
+	strncpy(password, client->password, 64);
+	strncpy(version, client->version, 64);
+	strncpy(worker, client->worker, 64);
+
 	db_query(db, "INSERT INTO workers (userid, ip, name, difficulty, version, password, worker, algo, time, pid) "\
 		"VALUES (%d, '%s', '%s', %f, '%s', '%s', '%s', '%s', %d, %d)",
 		client->userid, client->sock->ip, client->username, client->difficulty_actual,
-		client->version, client->password, client->worker, g_stratum_algo, now, getpid());
+		version, password, worker, g_stratum_algo, now, getpid());
 
 	client->workerid = (int)mysql_insert_id(&db->mysql);
 }
@@ -136,7 +183,8 @@ void db_update_workers(YAAMP_DB *db)
 		{
 			clientlog(client, "speed %f", client->speed);
 			shutdown(client->sock->sock, SHUT_RDWR);
-
+			db_clear_worker(db, client);
+			object_delete(client);
 			continue;
 		}
 
@@ -148,7 +196,7 @@ void db_update_workers(YAAMP_DB *db)
 		client->difficulty_written = client->difficulty_actual;
 	}
 
-	client_sort();
+	//client_sort();
 	g_list_client.Leave();
 }
 

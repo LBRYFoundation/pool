@@ -17,6 +17,7 @@ showTableSorter('maintable', '{
 tableClass: "dataGrid",
 widgets: ["Storage","saveSort"],
 textExtraction: {
+	1: function(node, table, cellIndex) { return $(node).attr("data"); },
 	5: function(node, table, cellIndex) { return $(node).attr("data"); }
 },
 widgetOptions: {
@@ -27,9 +28,9 @@ echo <<<end
 <thead>
 <tr>
 <th data-sorter="text" align="left">Algo</th>
-<th data-sorter="" align="right"></th>
-<th data-sorter="numeric" align="right">C</th>
-<th data-sorter="numeric" align="right">M</th>
+<th data-sorter="numeric" align="left">Up</th>
+<th data-sorter="numeric" align="right" title="Currencies">C</th>
+<th data-sorter="numeric" align="right" title="Miners">M</th>
 <th data-sorter="currency" align="right">Fee</th>
 <th data-sorter="numeric" align="right">Rate</th>
 <th data-sorter="currency" align="right" class="rental">Rent</th>
@@ -115,18 +116,21 @@ foreach($algos as $item)
 	$avgprice = $avgprice? mbitcoinvaluetoa(take_yaamp_fee($avgprice, $algo)): '-';
 
 	$algo_unit_factor = yaamp_algo_mBTC_factor($algo);
-	$btcmhday1 = $hashrate1 != 0? mbitcoinvaluetoa($total1 / $hashrate1 * 1000000 * 1000 * $algo_unit_factor): '';
+	$btcmhday1 = $hashrate1 != 0? mbitcoinvaluetoa($total1 / $hashrate1 * 1000000 * 1000 * $algo_unit_factor): '-';
 
 	$fees = yaamp_fee($algo);
 
-	$stratum = getdbosql('db_stratums', "algo=:algo", array(':algo'=>$algo));
+	// todo: show per port data ?
+	$stratum = getdbosql('db_stratums', "algo=:algo ORDER BY started DESC", array(':algo'=>$algo));
 	$isup = Booltoa($stratum);
+	$time = $isup ? datetoa2($stratum->started) : '';
+	$ts = $isup ? datetoa2($stratum->started) : '';
 
 	echo '<tr class="ssrow">';
 	echo '<td style="background-color: '.$algo_color.'"><b>';
 	echo CHtml::link($algo, '/site/gomining?algo='.$algo);
 	echo '</b></td>';
-	echo '<td align="right" style="width: 16px;">'.$isup.'</td>';
+	echo '<td align="left" style="font-size: .8em;" data="'.$ts.'">'.$isup.'&nbsp;'.$time.'</td>';
 	echo '<td align="right" style="font-size: .8em;">'.(empty($coins) ? '-' : $coins).'</td>';
 	echo '<td align="right" style="font-size: .8em;">'.(empty($count) ? '-' : $count).'</td>';
 	echo '<td align="right" style="font-size: .8em;">'.(empty($fees) ? '-' : "$fees %").'</td>';
@@ -154,16 +158,22 @@ foreach($algos as $item)
 	echo '<td align="right" style="font-size: .8em;">'.($avgprice == 0.0 ? '-' : $avgprice).'</td>';
 
 	// 24A
-	if($btcmhday1 != '-' && $btcmhday1 > $avgprice*1.1)
-		echo '<td align="right" style="font-size: .8em; color: white; background-color: #5cb85c">'.$btcmhday1.'</td>';
-	else if($btcmhday1 != '-' && $btcmhday1*1.3 < $avgprice)
-		echo '<td align="right" style="font-size: .8em; color: white; background-color: #d9534f">'.$btcmhday1.'</td>';
-	else if($btcmhday1 != '-' && $btcmhday1*1.2 < $avgprice)
-		echo '<td align="right" style="font-size: .8em; color: white; background-color: #e4804e">'.$btcmhday1.'</td>';
-	else if($btcmhday1 != '-' && $btcmhday1*1.1 < $avgprice)
-		echo '<td align="right" style="font-size: .8em; color: white; background-color: #f0ad4e">'.$btcmhday1.'</td>';
-	else
-		echo '<td align="right" style="font-size: .8em;">'.($btcmhday1 == 0.0 ? '-' : $btcmhday1).'</td>';
+	$style = '';
+	if ($btcmhday1 != '-')
+	{
+		$avgprice = (double) $avgprice;
+		$btcmhd = (double) $btcmhday1;
+
+		if($btcmhd > $avgprice*1.1)
+			$style = 'color: white; background-color: #5cb85c;';
+		else if($btcmhd*1.3 < $avgprice)
+			$style = 'color: white; background-color: #d9534f;';
+		else if($btcmhd*1.2 < $avgprice)
+			$style = 'color: white; background-color: #e4804e;';
+		else if($btcmhd*1.1 < $avgprice)
+			$style = 'color: white; background-color: #f0ad4e;';
+	}
+	echo '<td align="right" style="font-size: .8em; '.$style.'">'.$btcmhday1.'</td>';
 
 	echo '</tr>';
 }
@@ -180,7 +190,7 @@ echo '<td align="right" style="font-size: .8em;">'.$total_workers.'</td>';
 echo '<td align="right" style="font-size: .8em;"></td>';
 echo '<td align="right" style="font-size: .8em;">'.$total_hashrate.'</td>';
 echo '<td align="right" style="font-size: .8em;" class="rental"></td>';
-echo '<td align="right" style="font-size: .8em;">'.$bad.'%</td>';
+echo '<td align="right" style="font-size: .8em;">'.($bad ? $bad.'%' : '').'</td>';
 echo '<td align="right" style="font-size: .8em;"></td>';
 echo '<td align="right" style="font-size: .8em;" class="rental"></td>';
 echo '<td align="right" style="font-size: .8em;"></td>';
@@ -192,9 +202,9 @@ echo '</table><br>';
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 $markets = getdbolist('db_balances', "1 order by name");
-$total_balance = 0;
-$total_onsell = 0;
-$total_total = 0;
+$salebalances = array(); $alt_balances = array();
+$total_onsell = $total_altcoins = 0.0;
+$total_usd = $total_total = $total_balance = 0.0;
 
 echo '<table class="dataGrid">';
 echo '<thead>';
@@ -210,29 +220,9 @@ echo '<th align="right">Total</th>';
 echo '</tr>';
 echo '</thead>';
 
-echo '<tr class="ssrow"><td>to sell</td>';
-foreach($markets as $market)
-{
-	$onsell = bitcoinvaluetoa(dboscalar("select sum(amount*bid) from orders where market='$market->name'"));
+// ----------------------------------------------------------------------------------------------------
 
-	if($onsell > 0.2)
-		echo '<td align="right" style="color: white; background-color: #d9534f">'.$onsell.'</td>';
-	else if($onsell > 0.1)
-		echo '<td align="right" style="color: white; background-color: #f0ad4e">'.$onsell.'</td>';
-	else if($onsell == 0.0)
-		echo '<td align="right">-</td>';
-	else
-		echo '<td align="right">'.$onsell.'</td>';
-
-	$total_onsell += $onsell;
-}
-
-$total_onsell = bitcoinvaluetoa($total_onsell);
-
-echo '<td align="right" style="color: white; background-color: #c5b47f">'.$total_onsell.'</td>';
-echo '</tr>';
-
-echo '<tr class="ssrow"><td>balance</td>';
+echo '<tr class="ssrow"><td>BTC</td>';
 foreach($markets as $market)
 {
 	$balance = bitcoinvaluetoa($market->balance);
@@ -241,7 +231,7 @@ foreach($markets as $market)
 		echo '<td align="right" style="color: white; background-color: #5cb85c">'.$balance.'</td>';
 	else if($balance > 0.200)
 		echo '<td align="right" style="color: white; background-color: #f0ad4e">'.$balance.'</td>';
-	else if($market->balance == 0.0)
+	else if($balance == 0.0)
 		echo '<td align="right">-</td>';
 	else
 		echo '<td align="right">'.$balance.'</td>';
@@ -254,10 +244,86 @@ $total_balance = bitcoinvaluetoa($total_balance);
 echo '<td align="right" style="color: white; background-color: #eaa228">'.$total_balance.'</td>';
 echo '</tr>';
 
-echo '<tr class="ssrow"><td>total</td>';
+// ----------------------------------------------------------------------------------------------------
+
+echo '<tr class="ssrow"><td>orders</td>';
+if (YAAMP_ALLOW_EXCHANGE) {
+	// yaamp mode
+	foreach($markets as $market) {
+		$exchange = $market->name;
+		$onsell = bitcoinvaluetoa(dboscalar("SELECT sum(amount*bid) FROM orders WHERE market='$exchange'"));
+		$salebalances[$exchange] = $onsell;
+
+		if($onsell > 0.2)
+			echo '<td align="right" style="color: white; background-color: #d9534f">'.$onsell.'</td>';
+		else if($onsell > 0.1)
+			echo '<td align="right" style="color: white; background-color: #f0ad4e">'.$onsell.'</td>';
+		else if($onsell == 0.0)
+			echo '<td align="right">-</td>';
+		else
+			echo '<td align="right">'.$onsell.'</td>';
+
+		$total_onsell += $onsell;
+	}
+} else {
+	// yiimp mode
+	$ontrade = dbolist("SELECT name, onsell FROM balances B ORDER by name");
+	foreach($ontrade as $row) {
+		$exchange = $row['name'];
+		$onsell = bitcoinvaluetoa($row['onsell']);
+		$salebalances[$exchange] = $onsell;
+
+		echo '<td align="right">'.($onsell == 0 ? '-' : $onsell).'</td>';
+
+		$total_onsell += (double) $onsell;
+	}
+
+}
+$total_onsell = bitcoinvaluetoa($total_onsell);
+echo '<td align="right">'.$total_onsell.'</td>';
+echo '</tr>';
+
+// ----------------------------------------------------------------------------------------------------
+
+$t = time() - 48*60*60;
+$altmarkets = dbolist("
+	SELECT B.name, SUM((M.balance+M.ontrade)*M.price) AS balance
+	FROM balances B LEFT JOIN markets M ON M.name = B.name
+	WHERE IFNULL(M.base_coin,'BTC') IN ('','BTC') AND IFNULL(M.deleted,0)=0
+	GROUP BY B.name ORDER BY B.name
+");
+
+echo '<tr class="ssrow"><td>other</td>';
+foreach($altmarkets as $row)
+{
+	$balance = bitcoinvaluetoa($row['balance']);
+	$exchange = $row['name'];
+	if($balance == 0.0) {
+		echo '<td align="right">-</td>';
+	} else {
+		// to prevent duplicates on multi-algo coins, ignore symbols with a "-"
+		$balance = dboscalar("
+			SELECT SUM((M.balance+M.ontrade)*M.price) FROM markets M INNER JOIN coins C on C.id = M.coinid
+			WHERE M.name='$exchange' AND IFNULL(M.deleted,0)=0 AND INSTR(C.symbol,'-')=0
+		");
+		$balance = bitcoinvaluetoa($balance);
+		echo '<td align="right"><a href="/site/balances?exch='.$exchange.'">'.$balance.'</a></td>';
+	}
+	$alt_balances[$exchange] = $balance;
+	$total_altcoins += $balance;
+}
+$total_altcoins = bitcoinvaluetoa($total_altcoins);
+
+echo '<td align="right">'.$total_altcoins.'</td>';
+echo '</tr>';
+
+// ----------------------------------------------------------------------------------------------------
+
+echo '<tfoot>';
+echo '<tr class="ssrow"><td><b>Total</b></td>';
 foreach($markets as $market)
 {
-	$total = $market->balance + dboscalar("select sum(amount*bid) from orders where market='$market->name'");
+	$total = $market->balance + arraySafeVal($alt_balances,$market->name,0) + arraySafeVal($salebalances,$market->name,0);
 
 	echo '<td align="right">'.($total > 0.0 ? bitcoinvaluetoa($total) : '-').'</td>';
 	$total_total += $total;
@@ -265,8 +331,25 @@ foreach($markets as $market)
 
 $total_total = bitcoinvaluetoa($total_total);
 
-echo '<td align="right">'.$total_total.'</td>';
+echo '<td align="right"><b>'.$total_total.'</b></td>';
 echo '</tr>';
+
+// ----------------------------------------------------------------------------------------------------
+
+echo '<tr class="ssrow"><td>USD</td>';
+foreach($markets as $market)
+{
+	$total = $market->balance + arraySafeVal($alt_balances,$market->name,0) + arraySafeVal($salebalances,$market->name,0);
+	$usd = $total * $mining->usdbtc;
+
+	echo '<td align="right">'.($usd > 0.0 ? round($usd,2) : '-').'</td>';
+	$total_usd += $usd;
+}
+
+echo '<td align="right">'.round($total_usd,2).'&nbsp;$</td>';
+echo '</tr>';
+
+echo '</tfoot>';
 echo '</table><br/>';
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -424,34 +507,27 @@ function cronstate2text($state)
 	}
 }
 
-//$state_block = memcache_get($this->memcache->memcache, 'cronjob_block_state');
-$state_main = memcache_get($this->memcache->memcache, 'cronjob_main_state');
+$state_main = (int) $this->memcache->get('cronjob_main_state');
 $btc = getdbosql('db_coins', "symbol='BTC'");
 if (!$btc) $btc = json_decode('{"id": 6, "balance": 0}');
 
 echo '<span style="font-weight: bold; color: red;">';
 for($i=0; $i<10; $i++)
 {
-// 	if($i != $state_block-1 && $state_block>0)
-// 	{
-// 		$state = memcache_get($this->memcache->memcache, "cronjob_block_state_$i");
-// 		if($state) echo "block $i ";
-// 	}
-
 	if($i != $state_main-1 && $state_main>0)
 	{
-		$state = memcache_get($this->memcache->memcache, "cronjob_main_state_$i");
+		$state = $this->memcache->get("cronjob_main_state_$i");
 		if($state) echo "main $i ";
 	}
 }
 
 echo '</span>';
 
-$block_time = sectoa(time()-memcache_get($this->memcache->memcache, "cronjob_block_time_start"));
-$loop2_time = sectoa(time()-memcache_get($this->memcache->memcache, "cronjob_loop2_time_start"));
-$main_time2 = sectoa(time()-memcache_get($this->memcache->memcache, "cronjob_main_time_start"));
+$block_time = sectoa(time()-$this->memcache->get("cronjob_block_time_start"));
+$loop2_time = sectoa(time()-$this->memcache->get("cronjob_loop2_time_start"));
+$main_time2 = sectoa(time()-$this->memcache->get("cronjob_main_time_start"));
 
-$main_time = sectoa(memcache_get($this->memcache->memcache, "cronjob_main_time"));
+$main_time = sectoa($this->memcache->get("cronjob_main_time"));
 $main_text = cronstate2text($state_main);
 
 echo "*** main  ($main_time) $state_main $main_text ($main_time2), loop2 ($loop2_time), block ($block_time)<br>";
@@ -548,7 +624,8 @@ foreach($db_blocks as $db_block)
 	$algo_color = getAlgoColors($coin->algo);
 	echo '<tr style="background-color: '.$algo_color.';">';
 	echo '<td width="18px"><img width="16px" src="'.$coin->image.'"></td>';
-	echo '<td><b><a href="/site/coin?id='.$coin->id.'">'.$coin->name.'</a></b></td>';
+	$flags = $db_block->segwit ? '&nbsp;<img src="/images/ui/segwit.png" height="8px" valign="center" title="segwit">' : '';
+	echo '<td><b><a href="/site/coin?id='.$coin->id.'">'.$coin->name.'</a></b>'.$flags.'</td>';
 
 	echo '<td align="right" style="font-size: .8em">'.$db_block->amount.' '.$coin->symbol.'</td>';
 	echo '<td align="right" style="font-size: .8em" title="found '.$db_block->difficulty_user.'">'.$diff.'</td>';

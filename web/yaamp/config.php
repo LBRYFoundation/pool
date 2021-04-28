@@ -22,7 +22,7 @@ return array(
 			'urlFormat'=>'path',
 			'showScriptName'=>false,
 			'appendParams'=>true,
-			'caseSensitive'=>false,
+			'caseSensitive'=>true,
 			'rules'=>array(
 				// prevent /explorer/id/<num>/p1/v1/... -> /explorer/<num>?params...
 				'/explorer/<id:\d+>' => array('/explorer', 'urlFormat'=>'get'),

@@ -42,8 +42,8 @@ echo <<<end
 
 function page_refresh()
 {
-	pool_current_refresh();
 	miners_refresh();
+	pool_current_refresh();
 }
 
 function select_algo(algo)

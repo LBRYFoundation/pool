@@ -3,11 +3,9 @@
 JavascriptFile("/yaamp/ui/js/jquery.metadata.js");
 JavascriptFile("/yaamp/ui/js/jquery.tablesorter.widgets.js");
 
-$id = getiparam('id');
-if($id)
-	$db_blocks = getdbolist('db_blocks', "coin_id=:id order by time desc limit 250", array(':id'=>$id));
-else
-	$db_blocks = getdbolist('db_blocks', "1 order by time desc limit 250");
+$id = (int) getiparam('id');
+$db_blocks = getdbolist('db_blocks', "coin_id=:id order by time desc limit 250", array(':id'=>$id));
+$coin = getdbo('db_coins', $id);
 
 showTableSorter('maintable', "{
 	tableClass: 'dataGrid',
@@ -54,7 +52,6 @@ foreach($db_blocks as $db_block)
 {
 	if(!$db_block->coin_id) continue;
 
-	$coin = getdbo('db_coins', $db_block->coin_id);
 	if(!$coin) continue;
 
 	if($db_block->category == 'stake' && !$this->admin) continue;
@@ -74,12 +71,14 @@ foreach($db_blocks as $db_block)
 
 	echo '<td><img width="16" src="'.$coin->image.'"></td>';
 
+	$flags = $db_block->segwit ? '&nbsp;<img src="/images/ui/segwit.png" height="8px" valign="center" title="segwit"/>' : '';
+
 	echo '<td>';
 	if ($this->admin)
 		echo '<a href="/site/coin?id='.$coin->id.'"><b>'.$coin->name.'</b></a>';
 	else
 		echo '<b>'.$coin->name.'</b>';
-	echo '&nbsp;('.$coin->symbol.')</td>';
+	echo '&nbsp;('.$coin->symbol.')'.$flags.'</td>';
 
 //	$db_block->confirmations = $blockext['confirmations'];
 //	$db_block->save();
@@ -93,8 +92,14 @@ foreach($db_blocks as $db_block)
 	if($db_block->category == 'orphan')
 		echo "Orphan";
 
-	else if($db_block->category == 'immature')
-		echo "Immature ({$db_block->confirmations})";
+	else if($db_block->category == 'immature') {
+		$eta = '';
+		if ($coin->block_time && $coin->mature_blocks) {
+			$t = (int) ($coin->mature_blocks - $db_block->confirmations) * $coin->block_time;
+			$eta = "ETA: ".sprintf('%dh %02dmn', ($t/3600), ($t/60)%60);
+		}
+		echo "<span title=\"$eta\">Immature ({$db_block->confirmations})</span>";
+	}
 
 	else if($db_block->category == 'generate')
 		echo 'Confirmed';
@@ -126,12 +131,4 @@ foreach($db_blocks as $db_block)
 }
 
 echo "</tbody></table>";
-
-
-
-
-
-
-
-
 

@@ -35,6 +35,7 @@ public:
 
 	char pubkey[1024];
 	char script_pubkey[1024];
+	bool p2sh_address;
 
 	bool pos;
 	bool hassubmitblock;
@@ -47,6 +48,7 @@ public:
 	bool enable;
 	bool auto_ready;
 	bool newblock;
+	char lastnotifyhash[192];
 
 	int height;
 	double difficulty;
@@ -65,8 +67,12 @@ public:
 	bool usegetwork;
 	bool usememorypool;
 	bool hasmasternodes;
-	bool noblocknotify;
+	bool oldmasternodes;
 	bool multialgos; // pow_hash field (or mined_hash)
+
+	bool usesegwit;
+	char commitment[128];
+	char witness_magic[16];
 
 	YAAMP_JOB *job;
 //	YAAMP_JOB_TEMPLATE *templ;

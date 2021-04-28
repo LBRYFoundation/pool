@@ -8,12 +8,6 @@ SQLFLAGS= `mysql_config --cflags --libs`
 # if you use the auto exchange feature...
 CFLAGS += -DNO_EXCHANGE
 
-#CFLAGS += -DHASH_DEBUGLOG_
-#CFLAGS += -DRPC_DEBUGLOG_
-#CFLAGS += -DREMOTE_DEBUGLOG_
-#CFLAGS += -DSOCKET_DEBUGLOG_
-#CFLAGS += -DCLIENT_DEBUGLOG_
-
 #CFLAGS=-c -O2 -I /usr/include/mysql
 LDFLAGS=-O2 `mysql_config --libs`
 
@@ -63,6 +57,7 @@ clean:
 	rm -f algos/*.a
 	rm -f sha3/*.o
 	rm -f sha3/*.a
+	rm -f algos/ar2/*.o
 
 install: clean all
 	strip -s stratum

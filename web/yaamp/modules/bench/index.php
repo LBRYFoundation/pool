@@ -23,7 +23,8 @@ $algoFilter = $algo != 'all' ? ' AND B.algo='.sqlQuote($algo) : '';
 
 $chips = array();
 $in_db = dbolist("SELECT DISTINCT B.idchip as id, B.type, C.chip as name FROM benchmarks B".
-	" LEFT JOIN bench_chips C ON C.id=B.idchip WHERE B.idchip IS NOT NULL $algoFilter AND $sqlFilter GROUP BY B.idchip ORDER BY type DESC, name ASC");
+	" LEFT JOIN bench_chips C ON C.id=B.idchip WHERE B.idchip IS NOT NULL $algoFilter AND $sqlFilter".
+	" GROUP BY B.idchip, B.type ORDER BY B.type DESC, name ASC");
 foreach ($in_db as $row) {
 	$chips[$row['id']] = $row['name'];
 }
@@ -40,10 +41,11 @@ JavascriptFile("/yaamp/ui/js/jquery.tablesorter.widgets.js");
 
 include('functions.php');
 
+$filtered = false;
 $algo = user()->getState('bench-algo');
 if (empty($algo)) $algo = 'all';
-if (empty($idchip)) $idchip = NULL;
-if (empty($vid)) $vid = NULL;
+if (empty($idchip)) $idchip = NULL; else $filtered = true;
+if (empty($vid)) $vid = NULL; else $filtered = true;
 
 $this->pageTitle = "Benchmarks";
 
@@ -62,7 +64,9 @@ echo <<<end
 
 <style type="text/css">
 tr.ssrow.filtered { display: none; }
-.page .footer { width: auto; };
+td.limited { color: silver; }
+td.real { color: black; }
+.page .footer { width: auto; }
 </style>
 
 <div align="right" style="margin-top: -22px; margin-right: 140px;">
@@ -109,13 +113,13 @@ echo <<<END
 <th data-sorter="text">Time</th>
 <th data-sorter="text">Chip</th>
 <th data-sorter="text">Device</th>
-<th data-sorter="text">Arch</th>
 <th data-sorter="text">Vendor ID</th>
+<th data-sorter="text">Arch</th>
 <th data-sorter="numeric">Hashrate</th>
 <th data-sorter="numeric" title="Intensity (-i) for GPU or Threads (-t) for CPU miners">Int.</th>
 <th data-sorter="numeric" title="MHz">Freq</th>
 <th data-sorter="numeric" title="Watts if available">W</th>
-<th data-sorter="currency" title="mBTC/day">Cost</th>
+<th data-sorter="currency" title="Efficiency">H/W</th>
 <th data-sorter="text">Client</th>
 <th data-sorter="text">OS</th>
 <th data-sorter="text">Driver / Compiler</th>
@@ -131,20 +135,21 @@ foreach ($db_rows as $row) {
 
 	echo '<tr class="ssrow">';
 
-	$hashrate = Itoa2(1000*round($row['khps'],3),3).'H';
+	$hashrate = Itoa2(1000*round($row['khps'],3),2).'H';
+	if ($algo == 'equihash')
+		$hashrate = Itoa2(1000*round($row['khps'],5),3).'&nbsp;Sol/s';
+
 	$age = datetoa2($row['time']);
 
 	echo '<td class="algo">'.CHtml::link($row['algo'],'/bench?algo='.$row['algo']).'</td>';
 	echo '<td data="'.$row['time'].'">'.$age.'</td>';
 	echo '<td>'.($row['idchip'] ? CHtml::link($row['chip'],'/bench?chip='.$row['idchip']) : $row['chip']).'</td>';
-	if ($row['type'] == 'cpu') {
-		echo '<td>'.formatCPU($row).'</td>';
-		echo '<td>'.$row['arch'].'</td>';
-		echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
-	} else {
-		echo '<td>'.$row['device'].getProductIdSuffix($row).'</td>';
+	echo '<td>'.formatDevice($row).'</td>';
+	echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
+	if ($row['type'] == 'gpu') {
 		echo '<td>'.formatCudaArch($row['arch']).'</td>';
-		echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
+	} else {
+		echo '<td>'.$row['arch'].'</td>';
 	}
 
 	echo '<td data="'.$row['khps'].'">'.$hashrate.'</td>';
@@ -154,11 +159,40 @@ foreach ($db_rows as $row) {
 	else if ($algo == 'neoscrypt')
 		echo '<td data="'.$row['throughput'].'" title="neoscrypt intensity is different">'.$row['throughput'].'*</td>';
 	else
-		echo '<td data="'.$row['throughput'].'" title="'.$row['throughput'].' threads">'.$row['intensity'].'</td>';
+		echo '<td data="'.$row['throughput'].'" title="'.$row['throughput'].' threads">'.($row['intensity']?$row['intensity']:'-').'</td>';
 
-	echo '<td>'.($row['freq'] ? $row['freq'] : '-').'</td>';
-	echo '<td>'.(empty($row['power']) ? '-' : $row['power']).'</td>';
-	echo '<td>'.(empty($row['power']) ? '-' : mbitcoinvaluetoa(powercost_mBTC($row['power']))).'</td>';
+	// freqs
+	$title = ''; $class = '';
+	$content = $row['freq'] ? $row['freq'] : '-';
+	if (intval($row['realfreq']) > $row['freq'] / 10) {
+		$content = $row['realfreq'];
+		$class  = 'real';
+		$title .= 'Base clock: '.$row['freq'].' MHz'."\n";
+		$title .= 'Mem clock: '.$row['realmemf'].' MHz ('.($row['realmemf']-$row['memf']).')';
+	} else if ($row['memf']) {
+		$title = 'Mem Clock: '.$row['memf'].' MHz';
+	}
+	$props = array('title'=>$title,'class'=>$class);
+	echo CHtml::tag('td', $props, $content, true);
+
+	// power
+	$title = ''; $class = '';
+	$power = (double) $row['power'];
+
+	// Adjust the 750 Ti nvml watts
+	$factor = 1.0;
+	if ($row['chip'] == '750' || $row['chip'] == '750 Ti' || $row['chip'] == 'Quadro K620') $factor = 2.0;
+	$power *= $factor;
+
+	$content = $power>0 ? $power : '-';
+	if ($row['plimit']) {
+		$title = 'Power limit '.$row['plimit'].'W';
+		$class = 'limited';
+	}
+	$props = array('title'=>$title,'class'=>$class);
+	echo CHtml::tag('td', $props, $content, true);
+
+	echo '<td>'.($power>0 ? Itoa2(1000*round($row['khps'] / $power, 4),3) : '-').'</td>';
 	echo '<td>'.formatClientName($row['client']).'</td>';
 	echo '<td>'.$row['os'].'</td>';
 	echo '<td>'.$row['driver'].'</td>';
@@ -175,11 +209,12 @@ echo '</tbody>';
 
 if (!empty($algo)) {
 
+	$factor = isset($factor) ? $factor : 1.0;
 	if ($idchip) $sqlFilter .= ' AND idchip='.intval($idchip);
 
-	$avg = dborow("SELECT AVG(khps) as khps, AVG(power) as power, AVG(intensity) as intensity, AVG(freq) as freq, ".
+	$avg = dborow("SELECT AVG(khps) as khps, AVG(power) as power, AVG(B.intensity) as intensity, AVG(freq) as freq, ".
 		"COUNT(*) as records ".
-		"FROM benchmarks B WHERE algo=:algo AND power > 5 AND $sqlFilter", array(':algo'=>$algo)
+		"FROM benchmarks B WHERE algo=:algo AND B.intensity > 0 AND power > 5 AND $sqlFilter", array(':algo'=>$algo)
 	);
 
 	if (arraySafeVal($avg, 'records') == 0) {
@@ -192,24 +227,26 @@ if (!empty($algo)) {
 	if (arraySafeVal($avg, 'records') > 0) {
 		echo '<tfoot><tr class="ssfoot">';
 
-		echo '<th class="algo">'.CHtml::link($algo,'/bench?algo='.$algo).'</td>';
-		echo '<th>&nbsp;</td>';
+		echo '<th class="algo">'.CHtml::link($algo,'/bench?algo='.$algo).'</th>';
+		echo '<th>&nbsp;</th>';
 
-		echo '<th colspan="4">Average ('.$avg["records"].' records)</td>';
+		echo '<th colspan="4">Average ('.$avg["records"].' records)</th>';
 
-		echo '<th>'.Itoa2(1000*round($avg['khps'],3),3).'H</td>';
-		echo '<th>'.($avg['intensity'] ? round($avg['intensity'],1) : '').'</td>';
-		echo '<th>'.($avg['freq'] ? round($avg['freq']) : '').'</td>';
-		echo '<th>'.($avg['power'] ? round($avg['power']) : '').'</td>';
-		echo '<th>'.($avg['power'] ? mbitcoinvaluetoa(powercost_mBTC($avg['power'])) : '').'</td>';
+		echo '<th>'.Itoa2(1000*round($avg['khps'],3),2).'H</th>';
+		echo '<th>'.($avg['intensity'] ? round($avg['intensity'],1) : '').'</th>';
+		echo '<th>'.($avg['freq'] ? round($avg['freq']) : '').'</th>';
 
-		$hpw = 0;
-		if (floatval($avg['power']) > 0) {
-			$hpw = floatval($avg['khps']) / floatval($avg['power']);
-		}
-		echo '<th>'.($hpw ? Itoa2(1000*round($hpw,3),3).'H/W' : '').'</td>';
+		$power = (double) $avg['power'] * $factor;
+		echo '<th>'.($power>0 ? round($power) : '').'</th>';
 
-		echo '<th colspan="3">&nbsp;</td>';
+		$hpw = ($power>0) ? $hpw = floatval($avg['khps']) / $power : 0;
+		echo '<th>'.($hpw ? Itoa2(1000*round($hpw,3),2) : '').'</th>';
+
+		echo '<th title="Electricity price based on '.YIIMP_KWH_USD_PRICE.' USD per kWh">';
+		echo ($power>0 ? mbitcoinvaluetoa(powercost_mBTC($power)).' mBTC/day' : '').'</th>';
+
+		echo '<th colspan="2">&nbsp;</th>';
+		if ($this->admin) echo '<th>&nbsp;</th>'; // admin ops
 
 		echo '</tr></tfoot>';
 	}

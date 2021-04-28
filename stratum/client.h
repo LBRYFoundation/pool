@@ -5,12 +5,12 @@
 //	int count;
 //	double speed;
 //
-//	char ip[1024];
+//	char ip[64];
 //};
 
 struct YAAMP_ALGO
 {
-	char name[1024];
+	char name[64];
 	YAAMP_HASH_FUNCTION hash_function;
 
 	double diff_multiplier;
@@ -105,10 +105,12 @@ public:
 inline void client_delete(YAAMP_OBJECT *object)
 {
 	YAAMP_CLIENT *client = (YAAMP_CLIENT *)object;
-	socket_close(client->sock);
-	client->sock = NULL;
+	if (object == NULL) return;
 
+	socket_close(client->sock);
 	delete client;
+
+	object = NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -120,6 +122,7 @@ void get_random_key(char *key);
 
 void client_sort();
 void client_block_ip(YAAMP_CLIENT *client, const char *reason);
+void client_block_ipset(YAAMP_CLIENT *client, const char *ipset_name);
 
 bool client_reset_multialgo(YAAMP_CLIENT *client, bool first);
 bool client_initialize_multialgo(YAAMP_CLIENT *client);
@@ -153,6 +156,11 @@ int client_send_error(YAAMP_CLIENT *client, int error, const char *string);
 bool client_ask_stats(YAAMP_CLIENT *client);
 
 bool client_submit(YAAMP_CLIENT *client, json_value *json_params);
+
+int client_workers_count(YAAMP_CLIENT *client);
+int client_workers_byaddress(const char *username);
+bool client_auth_by_workers(YAAMP_CLIENT *client);
+
 void *client_thread(void *p);
 
 void db_check_user_input(char* input);

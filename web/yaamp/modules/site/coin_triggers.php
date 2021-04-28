@@ -27,6 +27,7 @@ div.help { float: left; color: #555; background-color: #ffffe0; padding: 6px; bo
 .help ul { width: 10px; margin: 6px 4px; padding: 0; overflow:hidden; width:390px; -moz-column-count: 2; -webkit-column-count: 2; column-count: 2; }
 .help li { list-style-type: none; width: 140px; }
 .page .footer { width: auto; }
+span.cmd { color: gray; }
 </style>
 end;
 
@@ -47,7 +48,7 @@ echo <<<end
 <th data-sorter="text">Type</th>
 <th data-sorter="text">Condition</th>
 <th data-sorter="currency">Value</th>
-<th data-sorter="text" width="50%">Description</th>
+<th data-sorter="text" width="50%">Description / Command</th>
 <th data-sorter="text">Status</th>
 <th data-sorter="numeric" width="80">Last check</th>
 <th data-sorter="" align="right" width="200">Operations</th>
@@ -71,12 +72,16 @@ foreach($notifications as $rule)
 		$status = '<span class="green"></span>';
 	}
 
+	$description = $rule->description;
+	if (!empty($description) && !empty($rule->notifycmd)) $description .= '<br/>';
+	$description .= '<span class="cmd">'.$rule->notifycmd.'</span>';
+
 	echo '<tr class="ssrow">';
 
 	echo '<td><b>'.$rule->notifytype.'</b></td>';
 	echo '<td>'.$rule->conditiontype.'</td>';
 	echo '<td>'.$rule->conditionvalue.'</td>';
-	echo '<td>'.$rule->description.'</td>';
+	echo '<td>'.$description.'</td>';
 	echo '<td>'.$status.'</td>';
 	echo '<td data="'.$rule->lastchecked.'">'.datetoa2($rule->lastchecked).'</td>';
 	echo '<td align="right">'.$operations.'</td>';
@@ -93,9 +98,10 @@ echo <<<end
 <label for="notifytype">Type</label>
 <select id="notifytype" name="notifytype">
 <option value="email">Email</option>
+<option value="rpc">RPC command</option>
 <option value="system">System command</option>
 </select><br/><br/>
-<input type="text" name="conditiontype" class="main-text-input" placeholder="Condition" style="width: 190px; margin-right: 4px;">
+<input type="text" name="conditiontype" class="main-text-input" placeholder="Condition like 'balance >'" style="width: 190px; margin-right: 4px;">
 <input type="text" name="conditionvalue" class="main-text-input" placeholder="Value" style="width: 100px; margin-right: 4px;">
 <input type="submit" value="Add rule" class="main-submit-button" ><br/>
 <input type="text" name="notifycmd" class="main-text-input" placeholder="Email or Command (optional)" style="width: 400px; margin-right: 4px; margin-top: 8px;"><br/>
@@ -104,7 +110,7 @@ echo <<<end
 </div>
 
 <div class="help">
-<b>System command variables:</b>
+<b>Command variables:</b>
 <ul>
 <li>\$X  current value</li>
 <li>\$F  condition db field</li>
@@ -113,6 +119,7 @@ echo <<<end
 <li>\$SYM  coin symbol</li>
 <li>\$S2  coin symbol2</li>
 <li>\$N  coin name</li>
+<li>\$A  wallet address</li>
 </ul>
 </div>
 

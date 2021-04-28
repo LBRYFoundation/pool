@@ -1,8 +1,6 @@
 
 #include "stratum.h"
 
-//#define CLIENT_DEBUGLOG_
-
 bool client_suggest_difficulty(YAAMP_CLIENT *client, json_value *json_params)
 {
 	if(json_params->u.array.length>0)
@@ -47,8 +45,8 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 
 	if(json_params->u.array.length>0)
 	{
-		strncpy(client->version, json_params->u.array.values[0]->u.string.ptr, 1023);
-	//	if(!strcmp(client->version, "stratum-proxy/0.0.1")) return false;
+		if (json_params->u.array.values[0]->u.string.ptr)
+			strncpy(client->version, json_params->u.array.values[0]->u.string.ptr, 1023);
 
 		if(strstr(client->version, "NiceHash") || strstr(client->version, "proxy") || strstr(client->version, "/3."))
 			client->reconnectable = false;
@@ -60,8 +58,9 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 
 	if(json_params->u.array.length>1)
 	{
-		char notify_id[1024];
-		strncpy(notify_id, json_params->u.array.values[1]->u.string.ptr, 1023);
+		char notify_id[1024] = { 0 };
+		if (json_params->u.array.values[1]->u.string.ptr)
+			strncpy(notify_id, json_params->u.array.values[1]->u.string.ptr, 1023);
 
 		YAAMP_CLIENT *client1 = client_find_notify_id(notify_id, true);
 		if(client1)
@@ -87,9 +86,9 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 			memcpy(client->job_history, client1->job_history, sizeof(client->job_history));
 			client1->lock_count = 0;
 
-#ifdef CLIENT_DEBUGLOG_
-			debuglog("reconnecting client locked to %x\n", client->jobid_next);
-#endif
+			if (g_debuglog_client) {
+				debuglog("reconnecting client locked to %x\n", client->jobid_next);
+			}
 		}
 
 		else
@@ -105,9 +104,9 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 				memcpy(client->job_history, client1->job_history, sizeof(client->job_history));
 				client1->lock_count = 0;
 
-#ifdef CLIENT_DEBUGLOG_
-				debuglog("reconnecting2 client\n");
-#endif
+				if (g_debuglog_client) {
+					debuglog("reconnecting2 client\n");
+				}
 			}
 		}
 	}
@@ -115,9 +114,9 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 	strcpy(client->extranonce1_last, client->extranonce1);
 	client->extranonce2size_last = client->extranonce2size;
 
-#ifdef CLIENT_DEBUGLOG_
-	debuglog("new client with nonce %s\n", client->extranonce1);
-#endif
+	if (g_debuglog_client) {
+		debuglog("new client with nonce %s\n", client->extranonce1);
+	}
 
 	client_send_result(client, "[[[\"mining.set_difficulty\",\"%.3g\"],[\"mining.notify\",\"%s\"]],\"%s\",%d]",
 		client->difficulty_actual, client->notify_id, client->extranonce1, client->extranonce2size);
@@ -128,6 +127,24 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 ///////////////////////////////////////////////////////////////////////////////////////////
 bool client_validate_user_address(YAAMP_CLIENT *client)
 {
+	int client_workers = 0;
+	if (client->userid == 0) {
+		client_workers = client_workers_byaddress(client->username);
+	} else {
+		client_workers = client_workers_count(client);
+	}
+
+	// if already logged in this instance, reuse data from other workers (in memory)
+	if (client_workers > 1) {
+		if (client_workers > 100 && (client_workers%100 == 0)) {
+			clientlog(client, "using %d workers", client_workers);
+		}
+		if (client_auth_by_workers(client)) {
+			// client->coinid filled
+			return true;
+		}
+	}
+
 	if (!client->coinid) {
 		for(CLI li = g_list_coind.first; li; li = li->next) {
 			YAAMP_COIND *coind = (YAAMP_COIND *)li->data;
@@ -178,7 +195,14 @@ bool client_validate_user_address(YAAMP_CLIENT *client)
 
 bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 {
-	if(json_params->u.array.length>1)
+
+	if(g_list_client.Find(client)) {
+		clientlog(client, "Already logged");
+		client_send_error(client, 21, "Already logged");
+		return false;
+	}
+
+	if(json_params->u.array.length>1 && json_params->u.array.values[1]->u.string.ptr)
 		strncpy(client->password, json_params->u.array.values[1]->u.string.ptr, 1023);
 
 	if (g_list_client.count >= g_stratum_max_cons) {
@@ -186,7 +210,7 @@ bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 		return false;
 	}
 
-	if(json_params->u.array.length>0)
+	if(json_params->u.array.length>0 && json_params->u.array.values[0]->u.string.ptr)
 	{
 		strncpy(client->username, json_params->u.array.values[0]->u.string.ptr, 1023);
 
@@ -205,14 +229,19 @@ bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 		}
 	}
 
+	if (!is_base58(client->username)) {
+		clientlog(client, "bad mining address %s", client->username);
+		return false;
+	}
+
 	bool reset = client_initialize_multialgo(client);
 	if(reset) return false;
 
 	client_initialize_difficulty(client);
 
-#ifdef CLIENT_DEBUGLOG_
-	debuglog("new client %s, %s, %s\n", client->username, client->password, client->version);
-#endif
+	if (g_debuglog_client) {
+		debuglog("new client %s, %s, %s\n", client->username, client->password, client->version);
+	}
 
 	if(!client->userid || !client->workerid)
 	{
@@ -262,7 +291,7 @@ bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 bool client_update_block(YAAMP_CLIENT *client, json_value *json_params)
 {
 	// password, id, block hash
-	if(json_params->u.array.length < 3)
+	if(json_params->u.array.length < 3 || !json_params->u.array.values[0]->u.string.ptr)
 	{
 		clientlog(client, "update block, bad params");
 		return false;
@@ -274,14 +303,18 @@ bool client_update_block(YAAMP_CLIENT *client, json_value *json_params)
 		return false;
 	}
 
-	YAAMP_COIND *coind = (YAAMP_COIND *)object_find(&g_list_coind, json_params->u.array.values[1]->u.integer, true);
+	int coinid = json_params->u.array.values[1]->u.integer;
+	if(!coinid) return false;
+	YAAMP_COIND *coind = (YAAMP_COIND *)object_find(&g_list_coind, coinid, true);
 	if(!coind) return false;
 
 	const char* hash = json_params->u.array.values[2]->u.string.ptr;
 
-#ifdef CLIENT_DEBUGLOG_
-	debuglog("notify: new %s block %s\n", coind->symbol, hash);
-#endif
+	if (g_debuglog_client) {
+		debuglog("notify: new %s block %s\n", coind->symbol, hash);
+	}
+
+	snprintf(coind->lastnotifyhash, 161, "%s", hash);
 
 	coind->newblock = true;
 	coind->notreportingcounter = 0;
@@ -339,6 +372,70 @@ static bool client_store_stats(YAAMP_CLIENT *client, json_value *result)
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+int client_workers_count(YAAMP_CLIENT *client)
+{
+	int count = 0;
+	if (!client || client->userid <= 0)
+		return count;
+
+	g_list_client.Enter();
+	for(CLI li = g_list_client.first; li; li = li->next)
+	{
+		YAAMP_CLIENT *cli = (YAAMP_CLIENT *)li->data;
+		if (cli->deleted) continue;
+		if (cli->userid == client->userid) count++;
+	}
+	g_list_client.Leave();
+
+	return count;
+}
+
+int client_workers_byaddress(const char *username)
+{
+	int count = 0;
+	if (!username || !strlen(username))
+		return count;
+
+	g_list_client.Enter();
+	for(CLI li = g_list_client.first; li; li = li->next)
+	{
+		YAAMP_CLIENT *cli = (YAAMP_CLIENT *)li->data;
+		if (cli->deleted) continue;
+		if (strcmp(cli->username, username) == 0) count++;
+	}
+	g_list_client.Leave();
+
+	return count;
+}
+
+bool client_auth_by_workers(YAAMP_CLIENT *client)
+{
+	if (!client || client->userid < 0)
+		return false;
+
+	g_list_client.Enter();
+	for(CLI li = g_list_client.first; li; li = li->next)
+	{
+		YAAMP_CLIENT *cli = (YAAMP_CLIENT *)li->data;
+		if (cli->deleted) continue;
+		if (client->userid) {
+			if(cli->userid == client->userid) {
+				client->coinid = cli->coinid;
+				break;
+			}
+		} else if (strcmp(cli->username, client->username) == 0) {
+			client->coinid = cli->coinid;
+			client->userid = cli->userid;
+			break;
+		}
+	}
+	g_list_client.Leave();
+
+	return (client->coinid > 0 && client->userid > 0);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
 //YAAMP_SOURCE *source_init(YAAMP_CLIENT *client)
 //{
 //	YAAMP_SOURCE *source = NULL;
@@ -359,7 +456,7 @@ static bool client_store_stats(YAAMP_CLIENT *client, json_value *result)
 //		source = new YAAMP_SOURCE;
 //		memset(source, 0, sizeof(YAAMP_SOURCE));
 //
-//		strncpy(source->ip, client->sock->ip, 1024);
+//		strncpy(source->ip, client->sock->ip, 64);
 //		source->speed = 1;
 //
 //		g_list_source.AddTail(source);
@@ -421,6 +518,11 @@ static bool client_store_stats(YAAMP_CLIENT *client, json_value *result)
 void *client_thread(void *p)
 {
 	YAAMP_CLIENT *client = new YAAMP_CLIENT;
+	if(!client) {
+		stratumlog("client_thread OOM");
+		pthread_exit(NULL);
+		return NULL;
+	}
 	memset(client, 0, sizeof(YAAMP_CLIENT));
 
 	client->reconnectable = true;
@@ -433,6 +535,8 @@ void *client_thread(void *p)
 
 	client->shares_per_minute = YAAMP_SHAREPERSEC;
 	client->last_submit_time = current_timestamp();
+
+//	usleep(g_list_client.count * 5000);
 
 	while(!g_exiting)
 	{
@@ -451,6 +555,10 @@ void *client_thread(void *p)
 
 		client->id_int = json_get_int(json, "id");
 		client->id_str = json_get_string(json, "id");
+		if (client->id_str && strlen(client->id_str) > 32) {
+			clientlog(client, "bad id");
+			break;
+		}
 
 		const char *method = json_get_string(json, "method");
 
@@ -477,9 +585,9 @@ void *client_thread(void *p)
 			break;
 		}
 
-#ifdef CLIENT_DEBUGLOG_
-		debuglog("client %s %d %s\n", method, client->id_int, client->id_str? client->id_str: "null");
-#endif
+		if (g_debuglog_client) {
+			debuglog("client %s %d %s\n", method, client->id_int, client->id_str? client->id_str: "null");
+		}
 
 		bool b = false;
 		if(!strcmp(method, "mining.subscribe"))
@@ -503,6 +611,9 @@ void *client_thread(void *p)
 		else if(!strcmp(method, "mining.get_transactions"))
 			b = client_send_result(client, "[]");
 
+		else if(!strcmp(method, "mining.multi_version"))
+			b = client_send_result(client, "false"); // ASICBOOST
+
 		else if(!strcmp(method, "mining.extranonce.subscribe"))
 		{
 			client->extranonce_subscribe = true;
@@ -515,9 +626,7 @@ void *client_thread(void *p)
 		else if(!strcmp(method, "getwork"))
 		{
 			clientlog(client, "using getwork"); // client using http:// url
-			break;
 		}
-
 		else
 		{
 			b = client_send_error(client, 20, "Not supported");
@@ -532,15 +641,18 @@ void *client_thread(void *p)
 
 //	source_close(client->source);
 
-#ifdef CLIENT_DEBUGLOG_
-	debuglog("client terminate\n");
-#endif
-	if(!client || client->deleted) {
+	if (g_debuglog_client) {
+		debuglog("client terminate\n");
+	}
+	if(!client) {
 		pthread_exit(NULL);
 	}
 
 	else if(client->sock->total_read == 0)
 		clientlog(client, "no data");
+
+	if(client->sock->sock >= 0)
+		shutdown(client->sock->sock, SHUT_RDWR);
 
 	if(g_list_client.Find(client))
 	{
@@ -550,12 +662,12 @@ void *client_thread(void *p)
 			db_clear_worker(g_db, client);
 			CommonUnlock(&g_db_mutex);
 		}
-
 		object_delete(client);
+	} else {
+		// only clients sockets in g_list_client are purged (if marked deleted)
+		socket_close(client->sock);
+		delete client;
 	}
-
-	else
-		client_delete(client);
 
 	pthread_exit(NULL);
 }

@@ -43,11 +43,11 @@ class CryptoRPC
 		switch ($method) {
 			case 'getheight':
 			case 'getinfo':
-			case 'gettransactions':
 			case 'start_mining':
 			case 'stop_mining':
 				return $this->rpcget($method, $params);
 
+			case 'gettransactions': // decodetransaction
 			case 'sendrawtransaction':
 				return $this->rpcpost($method, $params);
 
@@ -63,6 +63,7 @@ class CryptoRPC
 			// queries with named params
 			case 'getblocktemplate':
 			case 'get_payments':
+			case 'incoming_transfers':
 				if (count($params) == 1) {
 					// __call put all params in array $params
 					$pop = array_shift($params);
@@ -110,11 +111,13 @@ class CryptoRPC
 		);
 
 		curl_setopt_array($curl, $options);
-		curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($data));
-		//debuglog(json_encode($data));
+		$postdata = json_encode($data);
+		curl_setopt($curl, CURLOPT_POSTFIELDS, $postdata);
+		//debuglog($postdata);
 
 		// Execute the request and decode to an array
 		$this->raw_response = curl_exec($curl);
+		//debuglog($this->raw_response);
 
 		$this->response = json_decode($this->raw_response, TRUE);
 

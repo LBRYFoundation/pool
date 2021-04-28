@@ -118,57 +118,12 @@ div.terminal { color: silver; background: black; min-height: 180px; margin-left:
 end;
 
 $result = '';
-
-if (!empty($query)) try {
-	$params = explode(' ', trim($query));
-	$command = array_shift($params);
-
-	$p = array();
-	foreach ($params as $param) {
-		if ($param === 'true' || $param === 'false') {
-			$param = $param === 'true' ? true : false;
-		}
-		else if (strpos($param, '0x') === 0)
-			$param = "$param"; // eth hex crap
-		else
-			$param = (is_numeric($param)) ? 0 + $param : trim($param,'"');
-		$p[] = $param;
+if (!empty($query)) {
+	$result = $remote->execute($query);
+	if ($result === false) {
+		$result = $remote->error;
 	}
-
-	switch (count($params)) {
-	case 0:
-		$result = $remote->$command();
-		break;
-	case 1:
-		$result = $remote->$command($p[0]);
-		break;
-	case 2:
-		$result = $remote->$command($p[0], $p[1]);
-		break;
-	case 3:
-		$result = $remote->$command($p[0], $p[1], $p[2]);
-		break;
-	case 4:
-		$result = $remote->$command($p[0], $p[1], $p[2], $p[3]);
-		break;
-	case 5:
-		$result = $remote->$command($p[0], $p[1], $p[2], $p[3], $p[4]);
-		break;
-	case 6:
-		$result = $remote->$command($p[0], $p[1], $p[2], $p[3], $p[4], $p[5]);
-		break;
-	case 7:
-		$result = $remote->$command($p[0], $p[1], $p[2], $p[3], $p[4], $p[5], $p[6]);
-		break;
-	case 8:
-		$result = $remote->$command($p[0], $p[1], $p[2], $p[3], $p[4], $p[5], $p[6], $p[7]);
-		break;
-	default:
-		$result = 'error: too much parameters';
-	}
-
-} catch (Exception $e) {
-	$result = $remote->error;
+	debuglog("{$coin->symbol} CONSOLE {$query}");
 }
 
 if (!empty($remote->error) && $remote->error != $result) {

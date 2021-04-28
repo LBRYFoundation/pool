@@ -28,6 +28,7 @@ function doBleutradeTrading($quick=false)
 	$savebalance = getdbosql('db_balances', "name='$exchange'");
 	if (is_object($savebalance)) {
 		$savebalance->balance = 0;
+		$savebalance->onsell = 0;
 		$savebalance->save();
 	}
 
@@ -36,6 +37,7 @@ function doBleutradeTrading($quick=false)
 		if ($balance->Currency == 'BTC') {
 			if (is_object($savebalance)) {
 				$savebalance->balance = $balance->Available;
+				$savebalance->onsell = (double) $balance->Balance - (double) $balance->Available;
 				$savebalance->save();
 			}
 			continue;
@@ -243,7 +245,7 @@ function doBleutradeTrading($quick=false)
 	}
 
 	$withdraw_min = exchange_get($exchange, 'withdraw_min_btc', EXCH_AUTO_WITHDRAW);
-	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0005);
+	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.001);
 
 	if(floatval($withdraw_min) > 0 && $savebalance->balance >= ($withdraw_min + $withdraw_fee))
 	{

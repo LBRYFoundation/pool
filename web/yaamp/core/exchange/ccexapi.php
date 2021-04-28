@@ -85,6 +85,11 @@ class CcexAPI
 		return isset($json['result']) ? $json['result'] : array();
 	}
 
+	public function getMarketSummaries(){
+		$json = $this->jsonQuery($this->api_url.'api_pub.html?a=getmarketsummaries');
+		return isset($json['result']) ? $json['result'] : array();
+	}
+
 	public function getPairs(){
 		$json = $this->jsonQuery($this->api_url.'pairs.json');
 		return isset($json['pairs'])? $json['pairs']: array();
@@ -167,3 +172,48 @@ class CcexAPI
 
 }
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// manual update of one market
+function ccex_update_market($market)
+{
+	$exchange = 'c-cex';
+	if (is_string($market))
+	{
+		$symbol = $market;
+		$coin = getdbosql('db_coins', "symbol=:sym", array(':sym'=>$symbol));
+		if(!$coin) return false;
+		$pair = strtolower($symbol."-btc");
+		$market = getdbosql('db_markets', "coinid={$coin->id} AND name='$exchange'");
+		if(!$market) return false;
+
+	} else if (is_object($market)) {
+
+		$coin = getdbo('db_coins', $market->coinid);
+		if(!$coin) return false;
+		$symbol = $coin->getOfficialSymbol();
+		$pair = strtolower($symbol."-btc");
+		if (!empty($market->base_coin)) $pair = strtolower($symbol.'-'.$market->base_coin);
+	}
+
+	$t1 = microtime(true);
+	$ccex = new CcexAPI;
+	$ticker = $ccex->getTickerInfo($pair);
+	if (!$ticker || !is_array($ticker) || !isset($ticker['buy'])) {
+		$apims = round((microtime(true) - $t1)*1000,3);
+		user()->setFlash('error', "$exchange $symbol: error after $apims ms, ".json_encode($ticker));
+		return false;
+	}
+
+	$price2 = ($ticker['buy']+$ticker['sell'])/2;
+	$market->price2 = AverageIncrement($market->price2, $price2);
+	$market->price = AverageIncrement($market->price, $ticker['buy']);
+	$market->pricetime = time();
+	$market->save();
+
+	$apims = round((microtime(true) - $t1)*1000,3);
+	user()->setFlash('message', "$exchange $symbol price updated in $apims ms");
+
+	return true;
+}

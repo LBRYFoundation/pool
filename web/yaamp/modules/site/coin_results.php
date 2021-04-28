@@ -4,7 +4,8 @@ $coin = getdbo('db_coins', getiparam('id'));
 if (!$coin) $this->goback();
 
 $PoS = ($coin->algo == 'PoS'); // or if 'stake' key is present in 'getinfo' method
-$DCR = ($coin->rpcencoding == 'DCR');
+$DCR = ($coin->rpcencoding == 'DCR' || $coin->getOfficialSymbol() == 'DCR');
+$DGB = ($coin->rpcencoding == 'DGB' || $coin->getOfficialSymbol() == 'DGB');
 $ETH = ($coin->rpcencoding == 'GETH');
 
 $remote = new WalletRPC($coin);
@@ -30,6 +31,7 @@ if (YAAMP_ALLOW_EXCHANGE) {
 	echo "Earnings $reserved2 BTC, ";
 }
 echo "Balance (db) $balance $symbol";
+echo ", Owned ".bitcoinvaluetoa($coin->available)." $symbol";
 echo ", Owed ".CHtml::link($owed, "/site/earning?id=".$coin->id)." $symbol ($owed_btc BTC)";
 echo ", ".CHtml::link($reserved1, "/site/payments?id=".$coin->id)." $symbol cleared<br/><br/>";
 
@@ -80,7 +82,7 @@ foreach($list as $market)
 	echo '<td title="'.$updated.'">'.$price.'</td>';
 	echo '<td title="'.$updated.'">'.$price2.'</td>';
 
-	echo '<td>';
+	echo '<td style="max-width: 800px; text-overflow: ellipsis; overflow: hidden;">';
 	if (!empty($market->deposit_address)) {
 		$name = CJavaScript::encode($market->name);
 		$addr = CJavaScript::encode($market->deposit_address);
@@ -178,7 +180,13 @@ if (!empty($info)) {
 
 if ($DCR) {
 	// Decred Tickets
-	$stake = $remote->getbalance('*',0,'locked');
+	$stake = 0;
+	$balances = $remote->getbalance('*',0);
+	if (isset($balances["balances"])) {
+		foreach ($balances["balances"] as $accb) {
+			$stake += arraySafeVal($accb, 'lockedbytickets', 0);
+		}
+	}
 	$stakeinfo = $remote->getstakeinfo();
 	$ticketprice = arraySafeVal($stakeinfo,'difficulty');
 	$tickets  = arraySafeVal($stakeinfo, 'live', 0);
@@ -267,7 +275,8 @@ echo '</tbody></table>';
 // last week
 $list_since = arraySafeVal($_GET,'since',time()-(7*24*3600));
 
-$maxrows = arraySafeVal($_GET,'rows', 200);
+$maxrows = (int) arraySafeVal($_GET,'rows', 500);
+$maxrows = max($maxrows,  250);
 $maxrows = min($maxrows, 2500);
 
 echo <<<end
@@ -288,10 +297,10 @@ echo <<<end
 end;
 
 $account = '';
-if ($DCR) $account = '*';
-if ($ETH) $account = $coin->master_wallet;
+if ($DCR || $DGB) $account = '*';
+else if ($ETH) $account = $coin->master_wallet;
 
-$txs = $remote->listtransactions($account, 2500);
+$txs = $remote->listtransactions($account, $maxrows);
 
 if (empty($txs)) {
 	if (!empty($remote->error)) {
@@ -306,12 +315,13 @@ $txs_array = array(); $lastday = '';
 if (!empty($txs)) {
 	// to hide truncated days sums
 	$tx = reset($txs);
-	if (count($txs) == 2500)
+
+	if (count($txs) == $maxrows && isset($tx['time']))
 		$lastday = strftime('%F', $tx['time']);
 
 	if (!empty($txs)) foreach($txs as $tx)
 	{
-		if (intval($tx['time']) > $list_since)
+		if (arraySafeVal($tx, 'time', $list_since+1) > $list_since)
 			$txs_array[] = $tx;
 	}
 
@@ -383,16 +393,17 @@ if ($DCR) {
 			$prev_tx = $tx;
 		}
 		// for truncated day sums
-		if ($lastday == '' && count($txs) == 2500)
+		if ($lastday == '' && count($txs) == $maxrows)
 			$lastday = strftime('%F', $tx['time']);
 	}
-	ksort($txs_array); // reversed order
+	if ($info['version'] < 1010200)
+		ksort($txs_array); // was in reversed order
 }
 
 $rows = 0;
 foreach($txs_array as $tx)
 {
-	$category = $tx['category'];
+	$category = arraySafeVal($tx,'category');
 	if ($category == 'spent') continue;
 
 	$block = null;
@@ -401,10 +412,23 @@ foreach($txs_array as $tx)
 
 	echo '<tr class="ssrow '.$category.'">';
 
+	if (!isset($tx['time'])) {
+		// martian wallets
+		echo '<td colspan="8">'.json_encode($tx).'</td>';
+		continue;
+	}
+
 	$d = datetoa2($tx['time']);
 	echo '<td><b>'.$d.'</b></td>';
 
-	echo '<td>'.$category.'</td>';
+	$eta = '';
+	if ($category == 'immature') {
+		if ($coin->block_time && $coin->mature_blocks) {
+			$t = (int) ($coin->mature_blocks - arraySafeVal($tx,'confirmations',0)) * $coin->block_time;
+			$eta = "ETA: ".sprintf('%dh %02dmn', ($t/3600), ($t/60)%60);
+		}
+	}
+	echo '<td title="'.$eta.'">'.$category.'</td>';
 	echo '<td>'.$tx['amount'].'</td>';
 
 	if($block) {
@@ -412,10 +436,7 @@ foreach($txs_array as $tx)
 	} else
 		echo '<td></td><td></td>';
 
-	if(isset($tx['confirmations']))
-		echo '<td>'.$tx['confirmations'].'</td>';
-	else
-		echo '<td></td>';
+	echo '<td>'.arraySafeVal($tx,'confirmations').'</td>';
 
 	echo '<td width="280">';
 	if(isset($tx['address']))
@@ -469,6 +490,8 @@ end;
 $sums = array();
 foreach($txs_array as $tx)
 {
+	if (!isset($tx['time'])) continue;
+
 	$day = strftime('%F', $tx['time']); // YYYY-MM-DD
 	if ($day == $lastday) break; // do not show truncated days
 

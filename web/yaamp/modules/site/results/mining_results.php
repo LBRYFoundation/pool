@@ -141,17 +141,20 @@ foreach($list as $coin)
 	else
 		echo "<tr class='ssrow'>";
 
-	echo "<td width=18><img width=16 src='$coin->image'></td>";
+	echo '<td width="18">';
+	echo $coin->createExplorerLink('<img width="16" src="'.$coin->image.'">');
+	echo '</td>';
 
 	$owed = dboscalar("select sum(balance) from accounts where coinid=$coin->id");
-	if($coin->balance+$coin->mint < $owed*0.9)
-		echo "<td><b><a href='/site/block?id=$coin->id' title='We are short of this currency. Please select another one for payments until we find more blocks.'
-			style='color: #c55'>$name</a></b><span style='font-size: .8em;'> ($coin->algo)</span></td>";
-
-	else
+	if(YAAMP_ALLOW_EXCHANGE && $coin->balance+$coin->mint < $owed*0.9 ) {
+		$owed2 = bitcoinvaluetoa($owed - $coin->balance);
+		$symbol = $coin->getOfficialSymbol();
+		$title = "We are short of this currency ($owed2 $symbol). Please switch to another currency until we find more $symbol blocks.";
+		echo "<td><b><a href=\"/site/block?id={$coin->id}\" title=\"$title\" style=\"color: #c55;\">$name</a></b><span style=\"font-size: .8em;\"> ({$coin->algo})</span></td>";
+	} else {
 		echo "<td><b><a href='/site/block?id=$coin->id'>$name</a></b><span style='font-size: .8em'> ($coin->algo)</span></td>";
-
-	echo "<td align=right style='font-size: .8em;'><b>$reward $coin->symbol_show</a></td>";
+	}
+	echo "<td align=right style='font-size: .8em;'><b>$reward $coin->symbol_show</b></td>";
 
 	$title = "POW $coin->difficulty";
 	if($coin->rpcencoding == 'POS')
@@ -164,10 +167,12 @@ foreach($list as $coin)
 	else
 		echo "<td align=right style='font-size: .8em;'>$height</td>";
 
-	if(!empty($real_ttf))
-		echo "<td align=right style='font-size: .8em;' title='$real_ttf at $pool_hash'>$pool_ttf</td>";
+	if(!YAAMP_ALLOW_EXCHANGE && !empty($real_ttf))
+		echo '<td align="right" style="font-size: .8em;" title="'.$pool_ttf.' at full pool speed">'.$real_ttf.'</td>';
+	elseif(!empty($real_ttf))
+		echo '<td align="right" style="font-size: .8em;" title="'.$real_ttf.' at '.Itoa2($pool_hash).'">'.$pool_ttf.'</td>';
 	else
-		echo "<td align=right style='font-size: .8em;'>$pool_ttf</td>";
+		echo '<td align="right" style="font-size: .8em;" title="At current pool speed">'.$pool_ttf.'</td>';
 
 	if($coin->auxpow && $coin->auto_ready)
 		echo "<td align=right style='font-size: .8em; opacity: 0.6;' title='merge mined\n$network_hash' data='$pool_hash_pow'>$pool_hash_pow_sfx</td>";
@@ -217,11 +222,11 @@ if(isset($price_rent) && $showrental)
 
 echo "</table>";
 
-echo "<p style='font-size: .8em'>
-		&nbsp;*** estimated average time to find a block at full pool speed<br>
-		&nbsp;** approximate from the last 5 minutes submitted shares<br>
-		&nbsp;* 24h estimation from network difficulty in mBTC/Mh/day (mBTC/Gh/day for sha256 and blake algos)<br>
-		</p>";
+echo '<p style="font-size: .8em;">
+	&nbsp;*** estimated average time to find a block at full pool speed<br/>
+	&nbsp;** approximate from the last 5 minutes submitted shares<br/>
+	&nbsp;* 24h estimation from net difficulty in mBTC/MH/day (GH/day for sha & blake algos)<br>
+</p>';
 
 echo "</div></div><br>";
 

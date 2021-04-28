@@ -27,7 +27,8 @@ function doBittrexTrading($quick=false)
 
 	$savebalance = getdbosql('db_balances', "name='$exchange'");
 	if (is_object($savebalance)) {
-		$savebalance->balance = 0;
+		$savebalance->balance = 0.;
+		$savebalance->onsell = 0.;
 		$savebalance->save();
 	}
 
@@ -36,6 +37,7 @@ function doBittrexTrading($quick=false)
 		if ($balance->Currency == 'BTC') {
 			if (is_object($savebalance)) {
 				$savebalance->balance = $balance->Available;
+				$savebalance->onsell = (double) $balance->Balance - (double) $balance->Available;
 				$savebalance->save();
 			}
 			continue;
@@ -66,7 +68,7 @@ function doBittrexTrading($quick=false)
 	if($quick) $flushall = false;
 
 	// minimum order allowed by the exchange
-	$min_btc_trade = exchange_get($exchange, 'trade_min_btc', 0.00050000);
+	$min_btc_trade = exchange_get($exchange, 'trade_min_btc', 0.00100000);
 	// sell on ask price + 5%
 	$sell_ask_pct = exchange_get($exchange, 'trade_sell_ask_pct', 1.05);
 	// cancel order if our price is more than ask price + 20%
@@ -234,7 +236,7 @@ function doBittrexTrading($quick=false)
 	}
 
 	$withdraw_min = exchange_get($exchange, 'withdraw_min_btc', EXCH_AUTO_WITHDRAW);
-	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0002);
+	$withdraw_fee = exchange_get($exchange, 'withdraw_fee_btc', 0.0005);
 	if($withdraw_min > 0 && $savebalance->balance >= ($withdraw_min + $withdraw_fee))
 	{
 		// $btcaddr = exchange_get($exchange, 'withdraw_btc_address', YAAMP_BTCADDRESS);

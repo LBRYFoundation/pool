@@ -44,10 +44,6 @@ class RentingController extends CommonController
 			return;
 		}
 
-//		$recents = isset($_COOKIE['deposits'])? unserialize($_COOKIE['deposits']): array();
-//		$recents[$renter->address] = $renter->address;
-//		setcookie('deposits', serialize($recents), time()+60*60*24*30);
-
 		user()->setState('yaamp-deposit', $renter->address);
 		$this->redirect("/renting");
 	}
@@ -296,15 +292,23 @@ class RentingController extends CommonController
 			return;
 		}
 
-		$a = explode(':', getparam('order_host'));
+		$host = str_replace('stratum+tcp://', '', getparam('order_host'));
+		$a = explode(':', $host);
 		if(!isset($a[0]) || !isset($a[1]))
 		{
+			user()->setFlash('error', "invalid server url");
 			$this->redirect('/renting');
 			return;
 		}
 
-		$job->host = $a[0];
-		$job->port = $a[1];
+		$job->host = trim($a[0]);
+		$job->port = intval($a[1]);
+
+		if(stripos($job->host, YAAMP_STRATUM_URL) !== false) {
+			user()->setFlash('error', "invalid server url");
+			$this->redirect('/renting');
+			return;
+		}
 
 		$rent = dboscalar("select rent from hashrate where algo=:algo order by time desc limit 1", array(':algo'=>$job->algo));
 
@@ -402,7 +406,7 @@ end;
 
 	public function actionWithdraw()
 	{
-		$fees = 0.0001;
+		$fees = YAAMP_TXFEE_RENTING_WD; // 0.002
 
 		$deposit = user()->getState('yaamp-deposit');
 		if(!$deposit)
@@ -422,9 +426,9 @@ end;
 		$address = getparam('withdraw_address');
 
 		$amount = floatval(bitcoinvaluetoa(min($amount, $renter->balance-$fees)));
-		if($amount < 0.001)
+		if($amount < YAAMP_PAYMENTS_MINI) // 0.001
 		{
-			user()->setFlash('error', 'Minimum withdraw is 0.001');
+			user()->setFlash('error', 'Minimum withdraw is '.YAAMP_PAYMENTS_MINI);
 			$this->redirect("/renting");
 			return;
 		}

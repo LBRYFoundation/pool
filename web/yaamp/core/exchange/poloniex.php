@@ -1,10 +1,9 @@
 <?php
-// FINAL TESTED CODE - Created by Compcentral
-
-// NOTE: currency pairs are reverse of what most exchanges use...
-//       For instance, instead of XPM_BTC, use BTC_XPM
-
-class poloniex {
+/**
+ * Poloniex trading and public API
+ */
+class poloniex
+{
 		protected $api_key = '';
 		protected $api_secret = '';
 		protected $trading_url = "https://poloniex.com/tradingApi";
@@ -50,12 +49,16 @@ class poloniex {
 			curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
 			curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 40);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
 
 			// run the query
 			$res = curl_exec($ch);
 
-			if ($res === false) throw new Exception('Curl error: '.curl_error($ch));
+			if ($res === false) {
+				debuglog('poloniex: curl error '.curl_error($ch));
+				return false;
+			}
 			//echo $res;
 			$dec = json_decode($res, true);
 			if (!$dec){
@@ -114,7 +117,6 @@ class poloniex {
 		}
 
 		public function generate_address($currency) {
-			debuglog("poloniex: generate address $currency");
 			return $this->query(
 				array(
 					'command' => 'generateNewAddress',
@@ -258,4 +260,49 @@ class poloniex {
 			return $tot_btc;
 		}
 
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// manual update of one market
+function poloniex_update_market($market)
+{
+	$exchange = 'poloniex';
+	if (is_string($market))
+	{
+		$symbol = $market;
+		$coin = getdbosql('db_coins', "symbol=:sym", array(':sym'=>$symbol));
+		if(!$coin) return false;
+		$pair = "BTC_$symbol";
+		$market = getdbosql('db_markets', "coinid={$coin->id} AND name='$exchange'");
+		if(!$market) return false;
+
+	} else if (is_object($market)) {
+
+		$coin = getdbo('db_coins', $market->coinid);
+		if(!$coin) return false;
+		$symbol = $coin->getOfficialSymbol();
+		$pair = "BTC_$symbol";
+		if (!empty($market->base_coin)) $pair = $market->base_coin.'_'.$symbol;
+	}
+
+	$t1 = microtime(true);
+	$poloniex = new poloniex;
+	$ticker = $poloniex->get_ticker($pair);
+	if (!is_array($ticker) || !isset($ticker['highestBid'])) {
+		$apims = round((microtime(true) - $t1)*1000,3);
+		user()->setFlash('error', "$exchange $symbol: error after $apims ms, ".json_encode($ticker));
+		return false;
+	}
+
+	$price2 = ($ticker['highestBid']+$ticker['lowestAsk'])/2;
+	$market->price2 = AverageIncrement($market->price2, $price2);
+	$market->price = AverageIncrement($market->price, $ticker['highestBid']);
+	$market->pricetime = time();
+	$market->save();
+
+	$apims = round((microtime(true) - $t1)*1000,3);
+	user()->setFlash('message', "$exchange $symbol price updated in $apims ms");
+
+	return true;
 }

@@ -26,7 +26,7 @@ echo "</thead>";
 
 foreach(yaamp_get_algos() as $algo)
 {
-	if (!YAAMP_ALLOW_EXCHANGE && $coin && $coin->algo != $algo) continue;
+	if (!YAAMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
 
 	$user_rate1 = yaamp_user_rate($userid, $algo);
 	$user_rate1_bad = yaamp_user_rate_bad($userid, $algo);
@@ -80,6 +80,7 @@ if(count($workers))
 	echo "<thead>";
 	echo "<tr>";
 	echo "<th align=left>Details</th>";
+	if ($this->admin) echo "<th>IP</th>";
 	echo "<th align=left>Extra</th>";
 	echo "<th align=left>Algo</th>";
 	echo "<th align=right>Diff</th>";
@@ -103,11 +104,14 @@ if(count($workers))
 
 		$version = substr($worker->version, 0, 20);
 		$password = substr($worker->password, 0, 32);
+		if (empty($password) && !empty($worker->worker))
+			$password = substr($worker->worker, 0, 32);
 
 		$subscribe = Booltoa($worker->subscribe);
 
 		echo '<tr class="ssrow">';
 		echo '<td title="'.$worker->version.'">'.$version.'</td>';
+		if ($this->admin) echo "<td>{$worker->ip}</td>";
 		echo '<td title="'.$worker->password.'">'.$password.'</td>';
 		echo '<td>'.$worker->algo.'</td>';
 		echo '<td align="right">'.$worker->difficulty.'</td>';

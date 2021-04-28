@@ -84,7 +84,9 @@ foreach($list as $coin)
 	echo '<td>'.$coin->version.'</td>';
 
 	echo '<td>'.$coin->block_height.'</td>';
-	echo '<td data="'.$coin->difficulty.'">'.$difficulty.'</td>';
+	$diffnote = '';
+	if ($coin->algo == 'equihash' || $coin->algo == 'quark') $diffnote = '*';
+	echo '<td data="'.$coin->difficulty.'">'.$difficulty.$diffnote.'</td>';
 	$cnx_class = (intval($coin->connections) > 3) ? '' : 'low';
 	$peers_link = CHtml::link($coin->connections, "javascript:wallet_peers({$coin->id});", array('class'=>$cnx_class));
 	echo '<td>'.$peers_link.'</td>';
@@ -105,11 +107,11 @@ foreach($list as $coin)
 echo <<<end
 </tbody>
 </table>
+<p style="font-size: .8em;">
+	&nbsp;* Unified difficulty based on the hash target (might be different than wallet one)<br/>
+</p>
+</div></div>
 
-<br></div></div>
-
-<br><br><br><br><br><br><br><br><br><br>
-<br><br><br><br><br><br><br><br><br><br>
 <br><br><br><br><br><br><br><br><br><br>
 
 end;

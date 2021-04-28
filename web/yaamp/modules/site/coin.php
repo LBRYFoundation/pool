@@ -8,6 +8,9 @@ if (!$coin) {
 
 $this->pageTitle = 'Wallet - '.$coin->symbol;
 
+// force a refresh after 10mn to prevent memory leaks in chrome
+app()->clientScript->registerMetaTag('600', null, 'refresh');
+
 if (!empty($coin->algo) && $coin->algo != 'PoS')
 	user()->setState('yaamp-algo', $coin->algo);
 
@@ -20,7 +23,7 @@ $sellamount = $coin->balance;
 echo getAdminSideBarLinks().'<br/><br/>';
 echo getAdminWalletLinks($coin, $info, 'wallet');
 
-$maxrows = arraySafeVal($_REQUEST,'rows', 200);
+$maxrows = arraySafeVal($_REQUEST,'rows', 500);
 $since = arraySafeVal($_REQUEST,'since', time() - (7*24*3600)); // one week
 
 echo '<div id="main_actions">';

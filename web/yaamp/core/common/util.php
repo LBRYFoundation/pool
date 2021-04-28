@@ -40,6 +40,13 @@ function getparam($p,$default='')
 	return isset($_REQUEST[$p]) ? $_REQUEST[$p] : $default;
 }
 
+function gethexparam($p,$default='')
+{
+	$str = getparam($p, NULL);
+	$hex = (is_string($str) && ctype_xdigit($str)) ? $str : $default;
+	return $hex;
+}
+
 function getiparam($p,$default=0)
 {
 	// workaround for yii default /route/<id> ....
@@ -52,6 +59,12 @@ function getiparam($p,$default=0)
 		return (int) $id;
 	}
 	return isset($_REQUEST[$p]) ? intval($_REQUEST[$p]) : $default;
+}
+
+function getalgoparam()
+{
+	$algo = strip_tags(substr(getparam('algo'), 0, 32));
+	return $algo;
 }
 
 //////////////////////////////////////////////////////

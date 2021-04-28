@@ -196,7 +196,13 @@ function kraken_api_query($method, $params='')
 			break;
 	}
 
-	$res = $kraken->QueryPublic($method, $arrParams);
+	try {
+		$res = $kraken->QueryPublic($method, $arrParams);
+
+	} catch (KrakenAPIException $e) {
+		debuglog('kraken: QueryPublic() exception '.$e->getMessage());
+		return false;
+	}
 
 	$proper = array();
 	if (!empty($res) && isset($res['result']) && !empty($res['result'])) {
@@ -253,7 +259,13 @@ function kraken_api_user($method, $params='')
 			break;
 	}
 
-	$res = $kraken->QueryPrivate($method, $arrParams);
+	try {
+		$res = $kraken->QueryPrivate($method, $arrParams);
+
+	} catch (KrakenAPIException $e) {
+		debuglog('kraken: QueryPrivate() exception '.$e->getMessage());
+		return false;
+	}
 
 	$proper = array();
 	if (!empty($res) && isset($res['result']) && !empty($res['result'])) {
@@ -280,4 +292,55 @@ function kraken_btceur()
 		return $btceur;
 	}
 	return false;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// manual update of one market
+function kraken_update_market($market)
+{
+	$exchange = 'kraken';
+	if (is_string($market))
+	{
+		$symbol = $market;
+		$coin = getdbosql('db_coins', "symbol=:sym", array(':sym'=>$symbol));
+		if(!$coin) return false;
+		$pair = kraken_convertPair($symbol);
+		$pair2 = $symbol.'-BTC';
+		$market = getdbosql('db_markets', "coinid={$coin->id} AND name='$exchange'");
+		if(!$market) return false;
+
+	} else if (is_object($market)) {
+
+		$coin = getdbo('db_coins', $market->coinid);
+		if(!$coin) return false;
+		$symbol = $coin->getOfficialSymbol();
+		$pair = kraken_convertPair($symbol);
+		$pair2 = $symbol.'-BTC';
+		if (!empty($market->base_coin)) {
+			$pair = kraken_convertPair($symbol, $market->base_coin);
+			$pair2 = $symbol.'-'.$market->base_coin;
+		}
+	}
+
+	$t1 = microtime(true);
+	$m = kraken_api_query('Ticker', array('pair'=>$pair));
+	if(!$m || !isset($m[$pair2])) {
+		user()->setFlash('error', "$exchange $symbol price returned ".json_encode($m));
+		return false;
+	}
+	$ticker = $m[$pair2];
+
+	$a = (double) $ticker['a'][0];
+	$b = (double) $ticker['b'][0];
+	$price2 = ($a + $b) / 2;
+	$market->price2 = AverageIncrement($market->price2, $price2);
+	$market->price = AverageIncrement($market->price, $a*0.98);
+	$market->pricetime = time();
+	$market->save();
+
+	$apims = round((microtime(true) - $t1)*1000,3);
+	user()->setFlash('message', "$exchange $symbol price updated in $apims ms");
+
+	return true;
 }

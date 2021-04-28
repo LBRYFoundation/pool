@@ -15,7 +15,15 @@ $maxrows = arraySafeVal($_GET,'rows', 2500);
 $remote = new WalletRPC($coin);
 $info = $remote->getinfo();
 $stakeinfo = $remote->getstakeinfo();
-$locked = $remote->getbalance('*',0,'locked');
+$walletinfo = $remote->walletinfo(); // pfff
+$balances = $remote->getbalance('*',0);
+$locked = 0; $balance = 0;
+if (isset($balances["balances"])) {
+	foreach ($balances["balances"] as $accb) {
+		$locked += arraySafeVal($accb, 'lockedbytickets', 0);
+		$balance += arraySafeVal($accb, 'spendable', 0);
+	}
+}
 
 echo getAdminSideBarLinks().'<br/><br/>';
 echo getAdminWalletLinks($coin, $info, 'tickets').'<br/><br/>';
@@ -37,7 +45,7 @@ div.form { text-align: right; height: 30px; width: 350px; float: right; margin-t
 
 <div class="balance" style="display: block;">
 Stake: </b>{$locked} {$coin->symbol}<br/>
-Balance: </b>{$remote->getbalance()} {$coin->symbol}<br/>
+Spendable: </b>{$balance} {$coin->symbol}<br/>
 </div>
 
 <div class="form">
@@ -171,7 +179,8 @@ if (!empty($txs_array)) {
 		if ($lastday == '' && count($txs) == $maxrows)
 			$lastday = strftime('%F', arraySafeVal($tx,'blocktime', $tx['time']));
 	}
-	ksort($txs_array);
+	if ($info['version'] < 1010200)
+		ksort($txs_array);
 }
 
 if (!empty($tickets)) foreach ($tickets['hashes'] as $n => $txid) {
@@ -192,7 +201,8 @@ if (!empty($tickets)) foreach ($tickets['hashes'] as $n => $txid) {
 		$stx['stx'] = $stx;
 		$txs_array[$k] = $stx;
 	}
-	ksort($txs_array);
+	if ($info['version'] < 1010200)
+		ksort($txs_array);
 }
 
 $rows = 0;
@@ -263,13 +273,17 @@ echo '<b>Tickets: </b>'.$stakeinfo['live'];
 if ($stakeinfo['immature']) echo ' + '.$stakeinfo['immature'].' immature';
 if ($stakeinfo['ownmempooltix']) echo ' + '.$stakeinfo['ownmempooltix'].' purchased';
 echo '<br/>';
+if (arraySafeVal($stakeinfo,'missed',false)) {
+	echo '<b>Missed: </b>'.arraySafeVal($stakeinfo,'missed', -1);
+	echo ' ('.arraySafeVal($stakeinfo,'revoked',0).' revoked';
+	echo ', '.arraySafeVal($stakeinfo,'expired',0).' expired';
+	echo ')<br/>';
+}
 echo '<b>Total won: </b>'.$stakeinfo['totalsubsidy'].' '.$coin->symbol.' ('.$stakeinfo['voted'].')<br/>';
-if ($stakeinfo['missed']) echo '<b>Missed: </b>'.$stakeinfo['missed'].' '.$stakeinfo['revoked'].' revoked<br/>';
 
-$staking = $remote->getgenerate() > 0 ? 'enabled' : 'disabled';
+$voting = arraySafeVal($walletinfo,'voting',0) > 0 ? 'enabled' : 'disabled';
 echo '<br/>';
-echo '<b>Staking: </b>'.$staking.'<br/>';
-echo '<b>Auto buy ticket(s) < '.$remote->getticketmaxprice().' '.$coin->symbol.'</b><br/>';
+echo '<b>Voting: </b>'.$voting.'<br/>';
 
 $netfees = $remote->ticketfeeinfo(1,1);
 if (!empty($netfees)) {

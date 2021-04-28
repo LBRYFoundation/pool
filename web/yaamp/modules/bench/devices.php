@@ -2,10 +2,21 @@
 
 include('functions.php');
 
+$client_ip = arraySafeVal($_SERVER,'REMOTE_ADDR');
+$whitelisted = isAdminIP($client_ip);
+if (!$whitelisted && is_file(YAAMP_LOGS.'/overloaded')) {
+	header('HTTP/1.0 503 Disabled, server overloaded');
+	return;
+}
+
 $this->pageTitle = "Devices";
 
 $chips = array();
-$in_db = dbolist("SELECT DISTINCT device, type, chip, idchip, vendorid FROM benchmarks WHERE idchip > 0 ORDER BY type DESC, device, vendorid");
+// todo: bench_devices table to cache that
+$in_db = $this->memcache->get_database_list("benchmarks-devices",
+	"SELECT DISTINCT device, type, chip, idchip, vendorid FROM benchmarks WHERE idchip > 0 ORDER BY type DESC, device, vendorid",
+	array(), 120
+);
 foreach ($in_db as $key => $row) {
 	$vendorid = $row['vendorid'];
 	$chip = $row['chip'];
@@ -42,7 +53,12 @@ Devices in database
 end;
 
 $algos_columns = '';
-$algos = dbocolumn("SELECT DISTINCT algo FROM benchmarks ORDER BY algo LIMIT 30");
+$month = time() - (30 * 24 * 3600);
+
+$algos = $this->memcache->get_database_column("benchmarks-algos",
+	"SELECT DISTINCT algo FROM benchmarks WHERE time > $month ORDER BY algo LIMIT 20",
+	array(), 120
+);
 foreach ($algos as $algo) {
 	$algos_columns .= '<th>'.$algo.'</th>';
 }
@@ -89,11 +105,7 @@ foreach ($in_db as $row) {
 		$chip = CHtml::link($chip, '/bench?chip='.$row['idchip'].'&algo=all');
 	}
 	echo '<td>'.$chip.'</td>';
-
-	if ($row['type'] == 'gpu')
-		echo '<td>'.$row['device'].getProductIdSuffix($row).'</td>';
-	else
-		echo '<td>'.formatCPU($row).'</td>';
+	echo '<td>'.formatDevice($row).'</td>';
 
 	if (substr($vendorid,0,4) == '10de')
 		echo '<td><span class="generic" title="nVidia product id">'.$vendorid.'</span></td>';
@@ -101,9 +113,10 @@ foreach ($in_db as $row) {
 		echo '<td>'.CHtml::link($row['vendorid'],'/bench?vid='.$row['vendorid']).'</td>';
 
 	if (!empty($vendorid))
-		$records = dbocolumn("SELECT algo FROM benchmarks WHERE vendorid=:vid ", array(':vid'=>$vendorid));
+		$records = dbocolumn("SELECT DISTINCT algo FROM benchmarks WHERE vendorid=:vid ", array(':vid'=>$vendorid));
 	else
-		$records = dbocolumn("SELECT algo FROM benchmarks WHERE device=:dev ", array(':dev'=>$row['device'])); // cpu
+		$records = dbocolumn("SELECT DISTINCT algo FROM benchmarks WHERE device=:dev ", array(':dev'=>$row['device'])); // cpu
+
 	foreach ($algos as $algo) {
 		$tick = '&nbsp;';
 		if (in_array($algo, $records)) {

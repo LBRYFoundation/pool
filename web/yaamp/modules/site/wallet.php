@@ -6,9 +6,33 @@ JavascriptFile("/extensions/jqplot/plugins/jqplot.barRenderer.js");
 JavascriptFile("/extensions/jqplot/plugins/jqplot.highlighter.js");
 JavascriptFile('/yaamp/ui/js/auto_refresh.js');
 
-$recents = isset($_COOKIE['wallets'])? unserialize($_COOKIE['wallets']): array();
+$recents = array();
+$raw_recents = isset($_COOKIE['wallets'])? explode("|", $_COOKIE['wallets']): array();
+// make it unique
+foreach($raw_recents as $addr) {
+	$recents[$addr] = $addr;
+}
 
-$user = getuserparam(getparam('address'));
+$address = getparam('address');
+if (!empty($address) && preg_match('/[^A-Za-z0-9]/', $address)) {
+	// Just to make happy XSS seekers who can hack their own browser html...
+	die;
+}
+
+$drop_address = getparam('drop');
+if (!empty($drop_address)) {
+	// to clean cookies
+	foreach($recents as $k=>$addr) {
+		if ($addr == $drop_address) {
+			unset($recents[$k]);
+			if (controller()->admin)
+				setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
+			break;
+		}
+	}
+}
+
+$user = getuserparam($address);
 if($user)
 {
 	user()->setState('yaamp-wallet', $user->username);
@@ -19,7 +43,7 @@ if($user)
 	<script type="text/javascript">
 	$(function() {
 		$('#favicon').remove();
-		$('head').append('<link href="$coin->image" id="favicon" rel="shortcut icon">');
+		$('head').append('<link href="{$coin->image}" id="favicon" rel="shortcut icon">');
 	});
 	</script>
 END;
@@ -33,7 +57,7 @@ END;
 $username = $user? $user->username: '';
 
 if(!controller()->admin)
-	setcookie('wallets', serialize($recents), time()+60*60*24*30, '/');
+	setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
 
 echo <<<END
 <div id='resume_update_button' style='color: #444; background-color: #ffd; border: 1px solid #eea;
@@ -66,14 +90,14 @@ if($user) echo <<<END
 END;
 
 if($user) echo <<<END
-<div id='main_miners_results'>
+<div id='main_graphs_results'>
 <br><br><br><br><br><br><br><br><br><br>
 <br><br><br><br><br><br><br><br><br><br>
 </div>
 END;
 
 if($user) echo <<<END
-<div id='main_graphs_results'>
+<div id='main_miners_results'>
 <br><br><br><br><br><br><br><br><br><br>
 <br><br><br><br><br><br><br><br><br><br>
 </div>
@@ -89,11 +113,11 @@ echo <<<END
 END;
 
 echo "<table class='dataGrid2'>";
-foreach($recents as $address)
+foreach($recents as $addr)
 {
-	if(empty($address)) continue;
+	if(empty($addr)) continue;
 
-	$user = getuserparam($address);
+	$user = getuserparam($addr);
 	if(!$user) continue;
 
 	$coin = getdbo('db_coins', $user->coinid);
@@ -104,11 +128,10 @@ foreach($recents as $address)
 		echo "<tr class='ssrow'><td width=24>";
 
 	if($coin)
-		echo "<img width=16 src='$coin->image'>";
-	else
-		echo "<img width=16 src='/images/base/delete.png'>";
+		echo '<img width="16px" src="'.$coin->image.'">';
 
-	echo "</td><td><a href='/?address=$address' style='font-family: monospace; font-size: 1.1em;'>$address</a></td>";
+	echo '</td><td><a class="address" href="/?address='.$addr.'" style="font-family: monospace; font-size: 1.1em;">'.
+		$addr.'</a></td>';
 
 	$balance = bitcoinvaluetoa($user->balance);
 
@@ -117,8 +140,12 @@ foreach($recents as $address)
 	else
 		$balance = $balance>0? "$balance BTC": '';
 
-	echo "<td align=right>$balance</td>";
-	echo "<tr>";
+	echo '<td align="right">'.$balance.'</td>';
+	
+	$delicon = $address == $addr ? '' : '<img src="/images/base/delete.png" onclick="javascript:drop_cookie(this);" style="cursor:pointer;"/>';
+	echo '<td style="width: 16px; max-width: 16px;">'.$delicon.'</td>';
+	
+	echo '</tr>';
 }
 
 echo "</table></form></div></div><br>";
@@ -377,6 +404,12 @@ function main_wallet_tx()
 {
 	var w = window.open("/site/tx?address=$username", "yaamp_tx",
 		"width=800,height=600,location=no,menubar=no,resizable=yes,status=yes,toolbar=no");
+}
+
+function drop_cookie(el)
+{
+	var addr = $(el).closest('tr').find('td a.address').text();
+	window.location.href = '?address={$address}&drop=' + addr;
 }
 
 </script>

@@ -106,14 +106,30 @@ foreach ($in_db as $row) {
 	$chip = CHtml::link($row['chip'], '/bench?chip='.$row['idchip'].'&algo='.$algo);
 	echo '<td>'.$chip.'</td>';
 
-	$cost = powercost_mBTC($power);
 	$reward = $row['khps']*$algo_24E;
 
-	$ppw = $power>0 ? (double) $row['khps']/$power : 0.;
+	// Adjust the 750 Ti nvml watts
+	$factor = 1.0;
+	if ($row['chip'] == '750' || $row['chip'] == '750 Ti' || $row['chip'] == 'Quadro K620') $factor = 2.0;
+	$power *= $factor;
 
-	echo '<td data="'.$row['khps'].'">'.Itoa2(1000*round($row['khps'],3),3).'H</td>';
-	echo '<td>'.($power>0 ? round($power).' W' : '-').'</td>';
-	echo '<td data="'.$ppw.'">'.($power>0 ? Itoa2(1000*round($ppw,3),3).'H' : '-').'</td>';
+	$cost = powercost_mBTC($power);
+	$ppw = $power>0 ? (double) $row['khps']/$power : 0.;
+	$ppw_label = ($power>0 ? Itoa2(1000*round($ppw,3),3).'H' : '-');
+
+	if ($algo == 'equihash') {
+		echo '<td data="'.$row['khps'].'">'.round(1000*$row['khps'],1).'&nbsp;Sol/s</td>';
+		$ppw_label = ($power>0 ? Itoa2(1000*round($ppw,5),2).'&nbsp;Sol/W' : '-');
+	}
+	else
+		echo '<td data="'.$row['khps'].'">'.Itoa2(1000*round($row['khps'],3),3).'H</td>';
+
+	if ($factor > 1.0)
+		echo '<td style="opacity:.75;" title="Note: The '.$row['chip'].' power value seems to be for the chip only, x2 factor applied!">'.($power>0 ? round($power).'&nbsp;W*' : '-').'</td>';
+	else
+		echo '<td>'.($power>0 ? round($power).'&nbsp;W' : '-').'</td>';
+
+	echo '<td data="'.$ppw.'">'.$ppw_label.'</td>';
 	echo '<td>'.($power>0 ? mbitcoinvaluetoa($cost) : '-').'</td>';
 	echo '<td>'.mbitcoinvaluetoa($reward).'</td>';
 	if ($reward < $cost)

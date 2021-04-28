@@ -135,11 +135,16 @@ class Bitcoin {
 		// The ID should be unique for each call
 		$this->id++;
 
+		if (stripos($method, 'dump') !== false || stripos($method, 'backupwallet') !== false) {
+			$this->error = "$method method is not authorized!";
+			return FALSE;
+		}
+
 		// If no parameters are passed, this will be an empty array
 		if($method == 'getblocktemplate')
 		{
 			$param = isset($params[0]) ? $params[0] : '';
-			$request = "{\"method\":\"$method\",\"params\":[$param],\"id\":$this->id}";
+			$request = "{\"method\":\"$method\",\"params\":[{\"rules\": [\"segwit\"]}],\"id\":$this->id}";
 		//  debuglog($request);
 		}
 
@@ -202,10 +207,11 @@ class Bitcoin {
 		}
 
 		if (isset($this->response['error']) && $this->response['error']) {
-			// If bitcoind returned an error, put that in $this->error
-			$this->error = strtolower($this->response['error']['message']);
+			// store wallet error
+			$code = arraySafeVal($this->response['error'], 'code', '');
+			$message = arraySafeVal($this->response['error'], 'message', '');
+			$this->error = "error $code: ".strtolower($message);
 		}
-
 		elseif ($this->status != 200) {
 			// If bitcoind didn't return a nice error message, we need to make our own
 			switch ($this->status) {
@@ -230,4 +236,67 @@ class Bitcoin {
 
 		return $this->response['result'];
 	}
+
+	// direct json..
+	public function request_json($json)
+	{
+		$this->status       = null;
+		$this->error        = null;
+		$this->response     = null;
+		$this->raw_response = null;
+
+		$data = json_decode($json);
+		$data->id = $this->id++;
+		debuglog($json);
+
+		$ch = curl_init("{$this->proto}://{$this->username}:{$this->password}@{$this->host}:{$this->port}/{$this->url}");
+		$options = array(
+			CURLOPT_CONNECTTIMEOUT => 20,
+			CURLOPT_TIMEOUT        => 30,
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_FOLLOWLOCATION => true,
+			CURLOPT_MAXREDIRS      => 10,
+			CURLOPT_HTTPHEADER     => array('Content-type: application/json'),
+			CURLOPT_POST           => true,
+			CURLOPT_POSTFIELDS     => json_encode($data)
+		);
+		curl_setopt_array($ch, $options);
+
+		$this->raw_response = curl_exec($ch);
+		$this->response = json_decode($this->raw_response, true);
+		$this->status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$curl_error = curl_error($ch);
+
+		if (!empty($curl_error)) {
+			$this->error = $curl_error;
+		}
+
+		if (isset($this->response['error']) && $this->response['error']) {
+			// store wallet error
+			$this->error = strtolower($this->response['error']['message']);
+		}
+		elseif ($this->status != 200) {
+			switch ($this->status) {
+				case 400:
+					$this->error = 'HTTP_BAD_REQUEST';
+					break;
+				case 401:
+					$this->error = 'HTTP_UNAUTHORIZED';
+					break;
+				case 403:
+					$this->error = 'HTTP_FORBIDDEN';
+					break;
+				case 404:
+					$this->error = 'HTTP_NOT_FOUND';
+					break;
+			}
+		}
+
+		if ($this->error) {
+			return false;
+		}
+
+		return $this->response['result'];
+	}
+
 }

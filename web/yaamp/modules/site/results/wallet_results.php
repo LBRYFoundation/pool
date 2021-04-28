@@ -211,15 +211,24 @@ echo "</table>";
 
 echo "</div>";
 
-$usd = number_format($mining->usdbtc, 2, '.', ' ');
-echo "<p style='font-size: .8em'>
-	&nbsp;* approximate from current exchange rates<br>
-	&nbsp;** bitstamp <b>$usd</b> USD/BTC
-	</p>";
+echo '<p style="font-size: .8em; margin-top: 0; padding-left: 4px;">';
+echo '* approximate from current exchange rates<br/>';
+if ($refcoin->symbol == 'BTC') {
+	$usd = number_format($mining->usdbtc, 2, '.', ' ');
+	echo '** bitstamp <b>'.$usd.'</b> USD/BTC';
+}
+echo '</p>';
 
-echo "</div><br>";
+if ($refcoin->payout_min) {
+	echo '<p style="font-size: .8em; padding-left: 4px;">';
+	echo '<b>Note:</b> Minimum payout for this wallet is '.($refcoin->payout_min).' '.$refcoin->symbol;
+	echo '</p>';
+}
 
-WriteBoxHeader("Last 24 Hours Payouts: $user->username");
+echo '</div><br/>';
+
+$header = "Last 24 Hours Payouts: ".$user->username;
+WriteBoxHeader($header);
 
 $t = time()-24*60*60;
 $list = getdbolist('db_payouts', "account_id={$user->id} AND time>$t ORDER BY time DESC");
@@ -276,8 +285,8 @@ if (!empty($list_extra)) {
 	</tr>
 	<tr class="ssrow">
 	<td colspan="3" style="font-size: .9em; padding-bottom: 8px;">
-	Some wallets (LYB) have a problem and don't confirm a transaction in the requested time.<br/>
-	Please be honest and continue mining to handle these extra transactions sent to you.<br/>
+	Some wallets (UFO,LYB) have a problem and don't always confirm a transaction in the requested time.<br/>
+	<!-- Please be honest and continue mining to handle these extra transactions sent to you. --><br/>
 	</th>
 	</tr>
 	<tr class="ssrow">

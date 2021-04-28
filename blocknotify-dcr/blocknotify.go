@@ -1,10 +1,9 @@
-// Copyright (c) 2016 The btcsuite developers
-// Copyright (c) 2015-2016 The Decred developers
-// Use of this source code is governed by an ISC
-// license that can be found in the LICENSE file.
+// Copyright (c) 2015-2017 YiiMP
 
-// Sample blocknofify tool compatible with decred
-// will call the standard blocknotify yiimp tool on new block event.
+// Sample blocknotify wrapper tool compatible with decred notifications
+// will call the standard bin/blocknotify yiimp tool on new block event.
+
+// Note: this tool is connected directly to dcrd, not to the wallet!
 
 package main
 
@@ -13,20 +12,21 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
-	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
+	"bytes" // dcrd > 0.6+
+	"github.com/decred/dcrd/wire"
+
 	"github.com/decred/dcrrpcclient"
 //	"github.com/decred/dcrutil"
 )
 
 const (
 	processName = "blocknotify"    // set the full path if required
-	stratumDest = "yaamp.com:5744" // stratum host:port
+	stratumDest = "yaamp.com:3252" // stratum host:port
 	coinId = "1574"                // decred database coin id
 
-	walletUser = "yiimprpc"
-	walletPass = "myDecredPassword"
+	dcrdUser = "yiimprpc"
+	dcrdPass = "myDcrdPassword"
 
 	debug = false
 )
@@ -37,27 +37,31 @@ func main() {
 	// for notifications.  See the documentation of the dcrrpcclient
 	// NotificationHandlers type for more details about each handler.
 	ntfnHandlers := dcrrpcclient.NotificationHandlers{
-		OnBlockConnected: func(hash *chainhash.Hash, height int32, time time.Time, vb uint16) {
 
-			// Find the process path.
-			str := hash.String()
-			args := []string{ stratumDest, coinId, str }
-			out, err := exec.Command(processName, args...).Output()
-			if err != nil {
-				log.Printf("err %s", err)
-			} else if debug {
-				log.Printf("out %s", out)
-			}
-
-			if (debug) {
-				log.Printf("Block connected: %s %d", hash, height)
+		OnBlockConnected: func(blockHeader []byte, transactions [][]byte) {
+			// log.Printf("Block bytes: %v %v", blockHeader, transactions)
+			var bhead wire.BlockHeader
+			err := bhead.Deserialize(bytes.NewReader(blockHeader))
+			if err == nil {
+				str := bhead.BlockHash().String();
+				args := []string{ stratumDest, coinId, str }
+				out, err := exec.Command(processName, args...).Output()
+				if err != nil {
+					log.Printf("err %s", err)
+				} else if debug {
+					log.Printf("out %s", out)
+				}
+				if (debug) {
+					log.Printf("Block connected: %s", str)
+				}
 			}
 		},
+
 	}
 
 	// Connect to local dcrd RPC server using websockets.
-	// dcrwHomeDir := dcrutil.AppDataDir("dcrwallet", false)
-	// folder := dcrwHomeDir
+	// dcrdHomeDir := dcrutil.AppDataDir("dcrd", false)
+	// folder := dcrdHomeDir
 	folder := ""
 	certs, err := ioutil.ReadFile(filepath.Join(folder, "rpc.cert"))
 	if err != nil {
@@ -66,11 +70,11 @@ func main() {
 	}
 
 	connCfg := &dcrrpcclient.ConnConfig{
-		Host:         "127.0.0.1:15740",
+		Host:         "127.0.0.1:9109",
 		Endpoint:     "ws", // websocket
 
-		User:         walletUser,
-		Pass:         walletPass,
+		User:         dcrdUser,
+		Pass:         dcrdPass,
 
 		DisableTLS: (certs == nil),
 		Certificates: certs,

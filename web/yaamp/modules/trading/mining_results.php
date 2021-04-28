@@ -30,8 +30,8 @@ $table = array(
 );
 
 $res = false;
-if (isset($table[$algo]))
-	$res = fetch_url("https://www.nicehash.com/api?method=orders.get&algo={$table[$algo]}");
+if (isset($table[$algo]) && YAAMP_USE_NICEHASH_API)
+	$res = fetch_url("https://api.nicehash.com/api?method=orders.get&algo={$table[$algo]}");
 
 if(!$res) return;
 
@@ -74,7 +74,7 @@ foreach($niceorders as $order)
 
 	$allorders[$index]['speed'] += $order->accepted_speed;
 	$allorders[$index]['workers'] += $order->workers;
-	$allorders[$index]['btc'] += $order->btc_avail;
+	//$allorders[$index]['btc'] += $order->btc_avail;
 	$allorders[$index]['limit'] += $order->limit_speed;
 }
 

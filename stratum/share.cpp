@@ -78,6 +78,7 @@ static void share_add_worker(YAAMP_CLIENT *client, YAAMP_JOB *job, bool valid, c
 void share_add(YAAMP_CLIENT *client, YAAMP_JOB *job, bool valid, char *extranonce2, char *ntime, char *nonce, double share_diff, int error_number)
 {
 //	check_job(job);
+	g_shares_counter++;
 	share_add_worker(client, job, valid, ntime, share_diff, error_number);
 
 	YAAMP_SHARE *share = new YAAMP_SHARE;
@@ -127,6 +128,11 @@ void share_write(YAAMP_DB *db)
 		YAAMP_WORKER *worker = (YAAMP_WORKER *)li->data;
 		if(worker->deleted) continue;
 
+		if(!worker->workerid) {
+			object_delete(worker);
+			continue;
+		}
+
 		if(count) strcat(buffer, ",");
 		sprintf(buffer+strlen(buffer), "(%d, %d, %d, %d, %d, %d, %d, %f, %f, %d, '%s', %d)",
 			worker->userid, worker->workerid, worker->coinid, worker->remoteid, pid,
@@ -174,7 +180,7 @@ void share_prune(YAAMP_DB *db)
 void block_prune(YAAMP_DB *db)
 {
 	int count = 0;
-	char buffer[128*1024] = "insert into blocks (height, blockhash, coin_id, userid, workerid, category, difficulty, difficulty_user, time, algo) values ";
+	char buffer[128*1024] = "insert into blocks (height, blockhash, coin_id, userid, workerid, category, difficulty, difficulty_user, time, algo, segwit) values ";
 
 	g_list_block.Enter();
 	for(CLI li = g_list_block.first; li; li = li->next)
@@ -193,9 +199,9 @@ void block_prune(YAAMP_DB *db)
 		}
 
 		if(count) strcat(buffer, ",");
-		sprintf(buffer+strlen(buffer), "(%d, '%s', %d, %d, %d, 'new', %f, %f, %d, '%s')",
+		sprintf(buffer+strlen(buffer), "(%d, '%s', %d, %d, %d, 'new', %f, %f, %d, '%s', %d)",
 			block->height, block->hash, block->coinid, block->userid, block->workerid,
-			block->difficulty, block->difficulty_user, (int)block->created, g_stratum_algo);
+			block->difficulty, block->difficulty_user, (int)block->created, g_stratum_algo, block->segwit?1:0);
 
 		object_delete(block);
 		count++;
@@ -205,7 +211,7 @@ void block_prune(YAAMP_DB *db)
 	if(count) db_query(db, buffer);
 }
 
-void block_add(int userid, int workerid, int coinid, int height, double difficulty, double difficulty_user, const char *hash1, const char *hash2)
+void block_add(int userid, int workerid, int coinid, int height, double diff, double diff_user, const char *h1, const char *h2, int segwit)
 {
 	YAAMP_BLOCK *block = new YAAMP_BLOCK;
 	memset(block, 0, sizeof(YAAMP_BLOCK));
@@ -215,20 +221,21 @@ void block_add(int userid, int workerid, int coinid, int height, double difficul
 	block->workerid = workerid;
 	block->coinid = coinid;
 	block->height = height;
-	block->difficulty = difficulty;
-	block->difficulty_user = difficulty_user;
+	block->difficulty = diff;
+	block->difficulty_user = diff_user;
+	block->segwit = segwit;
 
-	strcpy(block->hash1, hash1);
-	strcpy(block->hash2, hash2);
+	strcpy(block->hash1, h1);
+	strcpy(block->hash2, h2);
 
 	g_list_block.AddTail(block);
 }
 
 // called from blocknotify tool
-void block_confirm(int coinid, const char *blockhash)
+bool block_confirm(int coinid, const char *blockhash)
 {
 	char hash[192];
-	if(strlen(blockhash) < 64) return;
+	if(strlen(blockhash) < 64) return false;
 
 	snprintf(hash, 161, "%s", blockhash);
 
@@ -254,10 +261,29 @@ void block_confirm(int coinid, const char *blockhash)
 			}
 			const char *h1 = json_get_string(json_res, "pow_hash"); // DGB, MYR, J
 			const char *h2 = json_get_string(json_res, "mined_hash"); // XVG
+			const char *h3 = json_get_string(json_res, "phash"); // XSH
 			if (h1) snprintf(hash, 161, "%s", h1);
 			else if (h2) snprintf(hash, 161, "%s", h2);
+			else if (h3) snprintf(hash, 161, "%s", h3);
 			//debuglog("%s: getblock %s -> pow %s\n", __func__, blockhash, hash);
-			json_value_free(json_res);
+			json_value_free(json);
+			break;
+		} else if (strcmp(coind->symbol,"ORB") == 0) {
+			char params[192];
+			sprintf(params, "[\"%s\"]", blockhash);
+			json_value *json = rpc_call(&coind->rpc, "getblock", params);
+			if(!json) {
+				debuglog("%s: error getblock, no answer\n", __func__);
+				break;
+			}
+			json_value *json_res = json_get_object(json, "result");
+			if(!json_res) {
+				debuglog("%s: error getblock, no result\n", __func__);
+				break;
+			}
+			const char *h = json_get_string(json_res, "proofhash");
+			if (h) snprintf(hash, 161, "%s", h);
+			json_value_free(json);
 			break;
 		}
 	}
@@ -266,17 +292,18 @@ void block_confirm(int coinid, const char *blockhash)
 	for(CLI li = g_list_block.first; li; li = li->next)
 	{
 		YAAMP_BLOCK *block = (YAAMP_BLOCK *)li->data;
-		if(block->coinid == coinid && !block->confirmed && !block->deleted)
+		if(block->coinid == coinid && !block->deleted)
 		{
 			if(strcmp(block->hash1, hash) && strcmp(block->hash2, hash)) continue;
-			debuglog("*** CONFIRMED %d : %s\n", block->height, block->hash2);
-
-			strncpy(block->hash, blockhash, 65);
-			block->confirmed = true;
-
-			return;
+			if (!block->confirmed) {
+				debuglog("*** CONFIRMED %d : %s\n", block->height, block->hash2);
+				strncpy(block->hash, blockhash, 65);
+				block->confirmed = true;
+			}
+			return true;
 		}
 	}
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

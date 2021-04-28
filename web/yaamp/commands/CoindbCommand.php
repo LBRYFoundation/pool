@@ -39,10 +39,10 @@ class CoindbCommand extends CConsoleCommand
 
 		} elseif ($args[0] == 'labels') {
 
-			$nbUpdated  = $this->updateCoinsLabels();
-			$nbUpdated += $this->updateCryptopiaLabels();
-			$nbUpdated += $this->updateYiimpLabels("yiimp.ccminer.org");
-			$nbUpdated += $this->updateYiimpLabels("zpool.ca");
+			$nbUpdated  = $this->updateCryptopiaLabels();
+			$nbUpdated += $this->updateCoinCapLabels();
+			$nbUpdated += $this->updateLiveCoinLabels();
+			$nbUpdated += $this->updateYiimpLabels("api.yiimp.eu");
 			$nbUpdated += $this->updateFromJson();
 
 			echo "total updated: $nbUpdated\n";
@@ -50,10 +50,12 @@ class CoindbCommand extends CConsoleCommand
 
 		} elseif ($args[0] == 'icons') {
 
-			$nbUpdated  = $this->grabBterIcons();
-			$nbUpdated += $this->grabCcexIcons();
+			$nbUpdated  = $this->grabCcexIcons();
 			$nbUpdated += $this->grabCryptopiaIcons();
+			$nbUpdated += $this->grabBittrexIcons(); // can be huge ones
+			$nbUpdated += $this->grabCoinExchangeIcons();
 			$nbUpdated += $this->grabAlcurexIcons();
+			$nbUpdated += $this->grabKuCoinIcons();
 			$nbUpdated += $this->grabNovaIcons();
 
 			echo "total updated: $nbUpdated\n";
@@ -71,50 +73,47 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
-	 * cryptocoincharts api
+	 * coincap.io api
 	 */
-	public static function getCoinChartsData()
+	public static function getCoinCapData()
 	{
-		$json = file_get_contents('http://api.cryptocoincharts.info/listCoins');
+		$json = file_get_contents('http://coincap.io/front');
 		$data = json_decode($json,true);
 		$array = array();
 		foreach ($data as $coin) {
-			$key = strtoupper($coin['id']);
+			$key = strtoupper($coin['short']);
 			if (empty($key)) continue;
 			$array[$key] = $coin;
 		}
 		return $array;
 	}
 
-	public function updateCoinsLabels()
+	public function updateCoinCapLabels()
 	{
-		$modelsPath = $this->basePath.'/yaamp/models';
-		if(!is_dir($modelsPath))
-			echo "Directory $modelsPath is not a directory\n";
-
-		require_once($modelsPath.'/db_coinsModel.php');
-
+		$coins = new db_coins;
 		$nbUpdated = 0;
 
-		$coins = new db_coins;
-		if ($coins instanceof CActiveRecord)
-		{
-			echo "".$coins->count()." coins in the database\n";
+		$dataset = $coins->findAll(array(
+			'condition'=>"name='unknown' OR name=symbol"
+		));
 
-			$dataset = $coins->findAll(array('condition'=>'name = :u', 'params'=>array(':u'=>'unknown')));
-			$json = self::getCoinChartsData();
+		if (!empty($dataset))
+		{
+			$json = self::getCoinCapData();
+			if (empty($json)) return 0;
+
 			foreach ($dataset as $coin) {
 				if ($coin->name == 'unknown' && isset($json[$coin->symbol])) {
 					$data = $json[$coin->symbol];
-					if ($data['name'] != $coin->symbol) {
-						echo "{$coin->symbol}: {$data['name']}\n";
-						$coin->name = $data['name'];
+					if ($data['long'] != $coin->name) {
+						echo "{$coin->symbol}: {$data['long']}\n";
+						$coin->name = trim($data['long']);
 						$nbUpdated += $coin->save();
 					}
 				}
 			}
 			if ($nbUpdated)
-				echo "$nbUpdated coin labels updated from cryptocoincharts.info\n";
+				echo "$nbUpdated coin labels updated from coincap.io\n";
 		}
 		return $nbUpdated;
 	}
@@ -140,14 +139,11 @@ class CoindbCommand extends CConsoleCommand
 
 	public function updateCryptopiaLabels()
 	{
-		$modelsPath = $this->basePath.'/yaamp/models';
-		require_once($modelsPath.'/db_coinsModel.php');
-
 		$coins = new db_coins;
 		$nbUpdated = 0;
 
 		$dataset = $coins->findAll(array(
-			'condition'=>"name=:u OR algo=''",
+			'condition'=>"name=:u OR algo='' OR algo='scrypt'",
 			'params'=>array(':u'=>'unknown')
 		));
 
@@ -158,10 +154,10 @@ class CoindbCommand extends CConsoleCommand
 			foreach ($dataset as $coin) {
 				if ($coin->name == 'unknown' && isset($json[$coin->symbol])) {
 					$cc = $json[$coin->symbol];
-					if ($cc->Name != $coin->symbol) {
+					if ($cc->Name != $coin->name) {
 						echo "{$coin->symbol}: {$cc->Name}\n";
 						$coin->name = $cc->Name;
-						if (empty($coin->algo))
+						if ($cc->Algorithm != 'scrypt')
 							$coin->algo = strtolower($cc->Algorithm);
 						$nbUpdated += $coin->save();
 					}
@@ -173,23 +169,61 @@ class CoindbCommand extends CConsoleCommand
 		return $nbUpdated;
 	}
 
+	public function updateLiveCoinLabels()
+	{
+		if (exchange_get('livecoin', 'disabled') == true) return 0;
+
+		$coins = new db_coins;
+		$nbUpdated = 0;
+
+		$dataset = $coins->findAll(array(
+			'condition'=>"name='unknown' AND id IN (SELECT M.coinid FROM markets M WHERE M.name='livecoin')",
+		));
+
+		if (!empty($dataset))
+		{
+			//echo count($dataset)." livecoin currencies without labels\n";
+			$labels = array();
+			$data = livecoin_api_query('info/coinInfo');
+			if(objSafeVal($data,'success') !== true || !is_array($data->info)) return;
+
+			foreach ($data->info as $c) {
+				$symbol = objSafeVal($c,'symbol','');
+				$labels[$symbol] = objSafeVal($c,'name','unknown');
+			}
+
+			foreach ($dataset as $coin) {
+				if ($coin->name == 'unknown' && isset($labels[$coin->symbol])) {
+					$label = $labels[$coin->symbol];
+					if ($label != $coin->name) {
+						echo "{$coin->symbol}: {$label}\n";
+						$coin->name = $label;
+						$nbUpdated += $coin->save();
+					}
+				}
+			}
+			if ($nbUpdated)
+				echo "$nbUpdated coin labels updated from livecoin coininfo\n";
+		}
+		return $nbUpdated;
+	}
+
 	public function updateYiimpLabels($pool)
 	{
-		$modelsPath = $this->basePath.'/yaamp/models';
-		require_once($modelsPath.'/db_coinsModel.php');
-
 		$coins = new db_coins;
 		$nbUpdated = 0; $nbAlgos = 0;
 
 		$dataset = $coins->findAll(array(
-			'condition'=>"name=:u OR algo=''",
+			'condition'=>"name=:u OR algo='' OR algo='scrypt'",
 			'params'=>array(':u'=>'unknown')
 		));
 
 		if (!empty($dataset))
 		{
 			$url = "http://{$pool}/api/currencies";
-			$json = json_decode(file_get_contents($url), true);
+			$data = @ file_get_contents($url);
+			if (empty($data)) return 0;
+			$json = json_decode($data, true);
 
 			if (!empty($json))
 			foreach ($dataset as $coin) {
@@ -200,7 +234,8 @@ class CoindbCommand extends CConsoleCommand
 					$coin->name = $cc['name'];
 					$nbUpdated += $coin->save();
 				}
-				if (empty($coin->algo)) {
+				if (empty($cc['algo'])) continue;
+				if (empty($coin->algo) || $coin->algo != $cc['algo']) {
 					$coin->algo = strtolower($cc['algo']);
 					echo "{$coin->symbol}: algo set to {$cc['algo']}\n";
 					$nbAlgos += $coin->save();
@@ -260,37 +295,55 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
-	 * Icon grabber - Bter
+	 * Icon grabber - Bittrex
 	 */
-	public function grabBterIcons()
+	public function grabBittrexIcons()
 	{
-		$url = 'http://bter.com/images/coin_icon/64/';
 		$nbUpdated = 0;
-		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id WHERE M.name='bter' AND IFNULL(coins.image,'') = ''";
+		$markets = bittrex_api_query('public/getmarkets');
+		if (!is_object($markets) || !is_object($markets->result)) {
+			echo "bittrex api error\n";
+			return $nbUpdated;
+		}
+		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id WHERE M.name='bittrex' AND IFNULL(coins.image,'') = ''";
 		$coins = dbolist($sql);
 		if (empty($coins))
-			return 0;
-		echo "bter: try to download new icons...\n";
+			return $nbUpdated;
+		echo "bittrex: try to download new icons...\n";
 		foreach ($coins as $coin) {
 			$coin = getdbo('db_coins', $coin["id"]);
 			$symbol = $coin->symbol;
 			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
 			$local = $this->basePath."/images/coin-{$symbol}.png";
+			$url = '';
+			foreach ($markets->result as $m) {
+				if ($m->MarketCurrency == $symbol) {
+					$url = $m->LogoUrl;
+					break;
+				}
+			}
+			if (empty($url)) continue;
 			try {
-				$data = @ file_get_contents($url.strtolower($symbol).'.png');
+				$data = @ file_get_contents($url);
 			} catch (Exception $e) {
 				continue;
 			}
 			if (strlen($data) < 2048) continue;
-			echo $coin->symbol." icon found\n";
 			file_put_contents($local, $data);
-			if (filesize($local) > 0) {
-				$coin->image = "/images/coin-{$symbol}.png";
-				$nbUpdated += $coin->save();
+			$size = filesize($local);
+			if ($size > 0) {
+				if ($size > 100*1024) {
+					echo "warning: $symbol icon is huge, ".round($size/1024,1)." KB ($url)\n";
+					unlink($local);
+				} else {
+					echo $symbol." icon found\n";
+					$coin->image = "/images/coin-{$symbol}.png";
+					$nbUpdated += $coin->save();
+				}
 			}
 		}
 		if ($nbUpdated)
-			echo "$nbUpdated icons downloaded from bter\n";
+			echo "$nbUpdated icons downloaded from bittrex\n";
 		return $nbUpdated;
 	}
 
@@ -352,7 +405,7 @@ class CoindbCommand extends CConsoleCommand
 			} catch (Exception $e) {
 				continue;
 			}
-			if (strlen($data) < 2048) continue;
+			if (strlen($data) < 3000 || strstr($data, '<script') || strstr($data,'<html')) continue;
 			echo $symbol." icon found\n";
 			file_put_contents($local, $data);
 			if (filesize($local) > 0) {
@@ -366,11 +419,47 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
+	 * Icon grabber - CoinExchange
+	 */
+	public function grabCoinExchangeIcons()
+	{
+		$url = 'https://www.coinexchange.io/assets/currencies/';
+		$nbUpdated = 0;
+		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id ".
+			"WHERE M.name='coinexchange' AND IFNULL(coins.image,'') = ''";
+		$coins = dbolist($sql);
+		if (empty($coins))
+			return 0;
+		echo "coinexchange: try to download new icons...\n";
+		foreach ($coins as $coin) {
+			$coin = getdbo('db_coins', $coin["id"]);
+			$symbol = $coin->symbol;
+			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
+			$local = $this->basePath."/images/coin-{$symbol}.png";
+			try {
+				$data = @ file_get_contents($url.strtolower($coin->name).'.png');
+			} catch (Exception $e) {
+				continue;
+			}
+			if (strlen($data) < 2048) continue;
+			echo $symbol." icon found\n";
+			file_put_contents($local, $data);
+			if (filesize($local) > 0) {
+				$coin->image = "/images/coin-{$symbol}.png";
+				$nbUpdated += $coin->save();
+			}
+		}
+		if ($nbUpdated)
+			echo "$nbUpdated icons downloaded from coinexchange\n";
+		return $nbUpdated;
+	}
+
+	/**
 	 * Icon grabber - Alcurex
 	 */
 	public function grabAlcurexIcons()
 	{
-		$url = 'https://alcurex.org/images/coins/';
+		$url = 'https://alcurex.com/CSS/img/coins/';
 		$nbUpdated = 0;
 		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id ".
 			"WHERE M.name='alcurex' AND IFNULL(coins.image,'') = ''";
@@ -380,8 +469,7 @@ class CoindbCommand extends CConsoleCommand
 		echo "alcurex: try to download new icons...\n";
 		foreach ($coins as $coin) {
 			$coin = getdbo('db_coins', $coin["id"]);
-			$symbol = $coin->symbol;
-			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
+			$symbol = $coin->getOfficialSymbol();
 			$local = $this->basePath."/images/coin-{$symbol}.png";
 			try {
 				$data = @ file_get_contents($url.strtoupper($symbol).'.png');
@@ -402,6 +490,41 @@ class CoindbCommand extends CConsoleCommand
 	}
 
 	/**
+	 * Icon grabber - KuCoin
+	 */
+	public function grabKuCoinIcons()
+	{
+		$url = 'https://assets.kucoin.com/www/coin/pc/';//GRIN.png
+		$nbUpdated = 0;
+		$sql = "SELECT DISTINCT coins.id FROM coins INNER JOIN markets M ON M.coinid = coins.id ".
+			"WHERE M.name='kucoin' AND IFNULL(coins.image,'') = ''";
+		$coins = dbolist($sql);
+		if (empty($coins))
+			return 0;
+		echo "kucoin: try to download new icons...\n";
+		foreach ($coins as $coin) {
+			$coin = getdbo('db_coins', $coin["id"]);
+			$symbol = $coin->getOfficialSymbol();
+			$local = $this->basePath."/images/coin-{$symbol}.png";
+			try {
+				$data = @ file_get_contents($url.$symbol.'.png');
+			} catch (Exception $e) {
+				continue;
+			}
+			if (strlen($data) < 2048) continue;
+			echo $symbol." icon found\n";
+			file_put_contents($local, $data);
+			if (filesize($local) > 0) {
+				$coin->image = "/images/coin-{$symbol}.png";
+				$nbUpdated += $coin->save();
+			}
+		}
+		if ($nbUpdated)
+			echo "$nbUpdated icons downloaded from kucoin\n";
+		return $nbUpdated;
+	}
+
+	/**
 	 * Icon grabber - NovaExchange
 	 */
 	public function grabNovaIcons()
@@ -416,8 +539,7 @@ class CoindbCommand extends CConsoleCommand
 		echo "nova: try to download new icons...\n";
 		foreach ($coins as $coin) {
 			$coin = getdbo('db_coins', $coin["id"]);
-			$symbol = $coin->symbol;
-			if (!empty($coin->symbol2)) $symbol = $coin->symbol2;
+			$symbol = $coin->getOfficialSymbol();
 			$local = $this->basePath."/images/coin-{$symbol}.png";
 			try {
 				$data = @ file_get_contents($url.strtolower($symbol).'.png');

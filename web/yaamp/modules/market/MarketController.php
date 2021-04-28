@@ -85,6 +85,7 @@ class MarketController extends CommonController
 		} else {
 			$market->lastsent = time();
 			$market->save();
+			BackendUpdatePoolBalances($coin->id);
 		}
 
 		$exchange = new db_exchange;

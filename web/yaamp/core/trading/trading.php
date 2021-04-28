@@ -1,16 +1,20 @@
 <?php
-
 require_once('poloniex_trading.php');
+require_once('binance_trading.php');
 require_once('bittrex_trading.php');
 require_once('bleutrade_trading.php');
-require_once('bter_trading.php');
 require_once('c-cex_trading.php');
 require_once('kraken_trading.php');
 require_once('yobit_trading.php');
 require_once('alcurex_trading.php');
+require_once('coinsmarkets_trading.php');
+require_once('crex24_trading.php');
 require_once('cryptopia_trading.php');
+require_once('hitbtc_trading.php');
+require_once('kucoin_trading.php');
 require_once('livecoin_trading.php');
 require_once('nova_trading.php');
+
 
 function cancelExchangeOrder($order=false)
 {
@@ -19,6 +23,9 @@ function cancelExchangeOrder($order=false)
 		{
 			case 'yobit':
 				doYobitCancelOrder($order->uuid);
+				break;
+			case 'binance':
+				doBinanceCancelOrder($order->uuid);
 				break;
 			case 'c-cex':
 				doCCexCancelOrder($order->uuid);
@@ -29,15 +36,29 @@ function cancelExchangeOrder($order=false)
 			case 'bleutrade':
 				doBleutradeCancelOrder($order->uuid);
 				break;
+			case 'crex24':
+				doCrex24CancelOrder($order->uuid);
+				break;
 			case 'cryptopia':
 				doCryptopiaCancelOrder($order->uuid);
 				break;
+			case 'hitbtc':
+				doHitBTCCancelOrder($order->uuid);
+				break;
+			case 'kucoin':
+				doKuCoinCancelOrder($order->uuid);
+				break;
+			case 'livecoin':
+				doLiveCoinCancelOrder($order->uuid);
+				break;
+
 		}
 }
 
 function runExchange($exchangeName=false)
 {
-	if ($exchangeName)
+	if (!empty($exchangeName))
+	{
 		switch($exchangeName)
 		{
 			case 'alcurex':
@@ -45,14 +66,23 @@ function runExchange($exchangeName=false)
 				updateAlcurexMarkets();
 				break;
 
-			case 'bter':
-				doBterTrading(true);
-				updateBterMarkets();
+			case 'binance':
+				doBinanceTrading(true);
+				updateBinanceMarkets();
+				break;
+
+			case 'crex24':
+				doCrex24Trading(true);
+				updateCrex24Markets();
 				break;
 
 			case 'cryptopia':
 				doCryptopiaTrading(true);
 				updateCryptopiaMarkets();
+				break;
+
+			case 'cryptobridge':
+				updateCryptoBridgeMarkets();
 				break;
 
 			case 'bitstamp':
@@ -63,10 +93,26 @@ function runExchange($exchangeName=false)
 				doBittrexTrading(true);
 				updateBittrexMarkets();
 				break;
+			case 'bitz':
+				updateBitzMarkets();
+				break;
+
+			case 'cexio':
+				getCexIoBalances();
+				break;
 
 			case 'c-cex':
 				doCCexTrading(true);
 				updateCCexMarkets();
+				break;
+
+			case 'coinexchange':
+				updateCoinExchangeMarkets();
+				break;
+
+			case 'coinsmarkets':
+				doCoinsMarketsTrading(true);
+				updateCoinsMarketsMarkets();
 				break;
 
 			case 'empoex':
@@ -84,14 +130,24 @@ function runExchange($exchangeName=false)
 				updateBleutradeMarkets();
 				break;
 
+			case 'hitbtc':
+				doHitBTCTrading(true);
+				updateHitBTCMarkets();
+				break;
+
 			case 'kraken':
 				doKrakenTrading(true);
 				updateKrakenMarkets();
 				break;
 
+			case 'kucoin':
+				doKuCoinTrading(true);
+				updateKucoinMarkets();
+				break;
+
 			case 'livecoin':
-				doLivecoinTrading(true);
-				updateLivecoinMarkets();
+				doLiveCoinTrading(true);
+				updateLiveCoinMarkets();
 				break;
 
 			case 'nova':
@@ -103,5 +159,9 @@ function runExchange($exchangeName=false)
 				doPoloniexTrading(true);
 				updatePoloniexMarkets();
 				break;
+
+			default:
+				debuglog(__FUNCTION__.' '.$exchangeName.' not implemented');
 		}
+	}
 }

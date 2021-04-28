@@ -3,12 +3,6 @@
 require_once('serverconfig.php');
 require_once('yaamp/defaultconfig.php');
 
-function ld($string)
-{
-	$d = date('h:i:s');
-	echo("$d - $string\n");
-}
-
 class CronjobController extends CommonController
 {
 	private function monitorApache()
@@ -47,7 +41,7 @@ class CronjobController extends CommonController
 
 	public function actionRunBlocks()
 	{
-//		debuglog(__METHOD__);
+//		screenlog(__FUNCTION__);
 		set_time_limit(0);
 
 		$this->monitorApache();
@@ -55,20 +49,21 @@ class CronjobController extends CommonController
 		$last_complete = memcache_get($this->memcache->memcache, "cronjob_block_time_start");
 		if($last_complete+(5*60) < time())
 			dborun("update jobs set active=false");
-
 		BackendBlockFind1();
-		BackendClearEarnings();
+		if(!memcache_get($this->memcache->memcache, 'balances_locked')) {
+			BackendClearEarnings();
+		}
 		BackendRentingUpdate();
 		BackendProcessList();
 		BackendBlocksUpdate();
 
 		memcache_set($this->memcache->memcache, "cronjob_block_time_start", time());
-//		debuglog(__METHOD__);
+//		screenlog(__FUNCTION__.' done');
 	}
 
 	public function actionRunLoop2()
 	{
-//		debuglog(__METHOD__);
+//		screenlog(__FUNCTION__);
 		set_time_limit(0);
 
 		$this->monitorApache();
@@ -83,7 +78,7 @@ class CronjobController extends CommonController
 		MonitorBTC();
 
 		$last = memcache_get($this->memcache->memcache, 'last_renting_payout2');
-		if($last + 5*60 < time())
+		if($last + 5*60 < time() && !memcache_get($this->memcache->memcache, 'balances_locked'))
 		{
 			memcache_set($this->memcache->memcache, 'last_renting_payout2', time());
 			BackendRentingPayout();
@@ -97,7 +92,7 @@ class CronjobController extends CommonController
 		}
 
 		memcache_set($this->memcache->memcache, "cronjob_loop2_time_start", time());
-//		debuglog(__METHOD__);
+//		screenlog(__FUNCTION__.' done');
 	}
 
 	public function actionRun()
@@ -132,21 +127,25 @@ class CronjobController extends CommonController
 				if(!YAAMP_PRODUCTION) break;
 
 				getBitstampBalances();
+				getCexIoBalances();
 				doBittrexTrading();
+				doCrex24Trading();
 				doCryptopiaTrading();
 				doKrakenTrading();
-				doLivecoinTrading();
+				doLiveCoinTrading();
 				doPoloniexTrading();
 				break;
 
 			case 2:
 				if(!YAAMP_PRODUCTION) break;
 
-				doYobitTrading();
+				doBinanceTrading();
 				doCCexTrading();
-				doBterTrading();
 				doBleutradeTrading();
+				doKuCoinTrading();
 				doNovaTrading();
+				doYobitTrading();
+				doCoinsMarketsTrading();
 				break;
 
 			case 3:
@@ -164,6 +163,7 @@ class CronjobController extends CommonController
 
 			case 6:
 				BackendBlockFind2();
+				BackendUpdatePoolBalances();
 				break;
 
 			case 7:
@@ -204,10 +204,13 @@ class CronjobController extends CommonController
 
 		sleep(10);
 		BackendDoBackup();
-
 		memcache_set($this->memcache->memcache, 'apache_locked', false);
 
+		// prevent user balances changes during payments (blocks thread)
+		memcache_set($this->memcache->memcache, 'balances_locked', true, 0, 300);
 		BackendPayments();
+		memcache_set($this->memcache->memcache, 'balances_locked', false);
+
 		BackendCleanDatabase();
 
 	//	BackendOptimizeTables();

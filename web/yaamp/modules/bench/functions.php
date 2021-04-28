@@ -109,8 +109,10 @@ function formatCPU($row)
 		$device = str_replace(' AuthenticAMD', ' AMD', $device);
 		$device = str_replace(' Quad-Core','', $device);
 		$device = str_replace(' Dual-Core','', $device);
+		$device = str_replace(' Triple-Core','', $device);
 		$device = str_replace(' Quad Core','', $device);
 		$device = str_replace(' Dual Core','', $device);
+		$device = str_replace(' Triple Core','', $device);
 		$device = str_replace(' Processor', '', $device);
 		if (strpos($device, 'Intel64') !== false && strpos($device, ' Intel')) {
 			$device = str_replace(' Intel','', $device);
@@ -126,6 +128,7 @@ function formatCPU($row)
 	$device = str_replace(' APU with Radeon','', $device);
 	$device = str_replace(' APU with AMD Radeon','', $device);
 	$device = str_replace(' version ',' ', $device);
+	$device = str_replace(' Core2 Quad',' Core2-Quad', $device);
 	$device = preg_replace('/(HD|R\d) Graphics/','', $device);
 	$device = preg_replace('/ 0$/', '', $device);
 	// VIA Nano processor U2250 (1.6GHz Capable)
@@ -135,6 +138,20 @@ function formatCPU($row)
 		$device = 'Virtual';
 	}
 	return trim($device);
+}
+
+function formatGPU($row)
+{
+	$label = $row['device'].getProductIdSuffix($row);
+	return strip_tags($label);
+}
+
+function formatDevice($row)
+{
+	if ($row['type'] == 'gpu')
+		return formatGPU($row);
+	else
+		return formatCPU($row);
 }
 
 function getChipName($row)
@@ -151,14 +168,20 @@ function getChipName($row)
 		if (strpos($device, 'AMD Athlon ')) {
 			return str_replace('AMD ', '', $device);
 		}
+		$device = preg_replace('/AMD (A6\-[1-9]+[KM]*) APU .+/','\1', $device);
+		$device = preg_replace('/AMD (E[\d]*\-[\d]+) APU .+/','\1', $device);
+		$device = preg_replace('/AMD (A[\d]+\-[\d]+[KP]*) Radeon .+/','\1', $device);
 		$words = explode(' ', $device);
 		$chip = array_pop($words);
 		if (strpos($device, 'Fam.')) $chip = '-'; // WIN ENV
 
 	} else {
 
-		// nNidia
-		$words = explode(' ', $row['device']);
+		// nVidia
+		$device = str_replace(' with Max-Q Design', '', $row['device']);
+		$device = str_replace(' COLLECTORS EDITION', '', $device);
+
+		$words = explode(' ', $device);
 		$chip = array_pop($words);
 		$vendorid = $row['vendorid'];
 		if (!is_numeric($chip)) {
@@ -167,8 +190,24 @@ function getChipName($row)
 			$chip = str_replace('GeForce ','', $chip);
 			$chip = str_replace('GT ','', $chip);
 			$chip = str_replace('GTX ','', $chip);
+			$chip = str_replace('650 Ti BOOST','650 Ti', $chip);
+			$chip = str_replace('760 Ti OEM','760 Ti', $chip);
 			$chip = str_replace(' (Pascal)',' Pascal', $chip);
+			$chip = str_replace('Quadro M6000 24GB','Quadro M6000', $chip);
+			$chip = str_replace('Tesla P100 (PCIe)','Tesla P100', $chip);
+			$chip = str_replace('Tesla P100-SXM2-16GB','Tesla P100', $chip);
+			$chip = str_replace('Tesla P100-PCIE-16GB','Tesla P100', $chip);
+			$chip = str_replace('Tesla V100-SXM2-16GB','Tesla V100', $chip);
+			$chip = preg_replace('/ASUS ([6-9]\d\dM)/','\1', $chip); // ASUS 940M
+			$chip = preg_replace('/MSI ([6-9]\d\dM)/','\1', $chip); // MSI 840M
+			$chip = preg_replace('/MSI ([6-9]\d\dMX)/','\1', $chip); // MSI 940MX
+			if (strpos($chip, 'P106-100') !== false || strpos($chip, 'CMP3-1') !== false)
+				$chip = 'P106-100';
+			if (strpos($chip, 'P104-100') !== false || strpos($chip, 'CMP4-1') !== false)
+				$chip = 'P104-100';
 		}
+		// Quadro 600 - Quadro 2000
+		if (strstr($row['device'], 'Quadro') && !strstr($chip, 'Quadro')) $chip = "Quadro $chip";
 	}
 
 	return $chip;

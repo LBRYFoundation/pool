@@ -226,7 +226,7 @@ function BackendUpdateDeposit()
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	$fees = 0.0001;
+	$fees = YAAMP_TXFEE_RENTING_WD; // 0.002
 
 	$list = getdbolist('db_rentertxs', "type='withdraw' and tx='scheduled'");
 	foreach($list as $tx)
