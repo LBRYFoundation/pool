@@ -1,4 +1,5 @@
 # Lbry Mining Pool based on Yiimp
+# Home Codebase of [LBRYPool](https://lbrypool.net)
 
 
 ### TODO: Rewrite this README, Rewrite Install Script to be more logical, Do it all again to document the hax. Be sure to rewrite things to use TMUX and document as such.
