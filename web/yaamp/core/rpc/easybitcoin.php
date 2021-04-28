@@ -144,7 +144,7 @@ class Bitcoin {
 		if($method == 'getblocktemplate')
 		{
 			$param = isset($params[0]) ? $params[0] : '';
-			$request = "{\"method\":\"$method\",\"params\":[$param],\"id\":$this->id}";
+			$request = "{\"method\":\"$method\",\"params\":[{\"rules\": [\"segwit\"]}],\"id\":$this->id}";
 		//  debuglog($request);
 		}
 
