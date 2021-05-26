@@ -860,9 +860,12 @@ cd ~ || exit
 wget https://github.com/lbryio/lbrycrd/releases/download/v0.17.3.3/lbrycrd-linux-1733.zip
 sudo unzip lbrycrd-linux-1733.zip -d /usr/bin
 
-lbrycrdd -daemon -server
-sleep 3
-lbrycrd-cli stop
+# Make sure the working area of the lbrycrdd does exist by starting the daemon for some seconds
+if [[ ! -d ~/.lbrycrd ]]; then
+  lbrycrdd -daemon -server
+  sleep 3
+  lbrycrd-cli stop
+fi
 
 # Create config for Lbry
 echo && echo "Configuring Lbrycrd.conf"
