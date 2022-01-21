@@ -2,7 +2,7 @@
 ################################################################################
 # Original Author: Oakey22
 # Maintained by: Coolguy3289
-# Version 1.99 (April 2021)
+# Version 1.999 (January 2022)
 #
 # Program:
 #   Install Lbry Pool on Ubuntu 18.04 running Nginx, MariaDB, and php7.x
