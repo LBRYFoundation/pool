@@ -91,10 +91,6 @@ sudo apt autoremove -y
 
 # 1.b: Install all dependencies
 clear
-output "Installing MySQL repository."
-output ""
-wget https://dev.mysql.com/get/mysql-apt-config_0.8.17-1_all.deb
-sudo dpkg -i ./mysql-apt-config_0.8.17-1_all.deb
 sudo apt update
 export DEBIAN_FRONTEND="noninteractive"
 output "Installing pre-requisite repositories."
@@ -105,7 +101,7 @@ sudo add-apt-repository ppa:bitcoin/bitcoin -y
 sudo apt update
 output "Installing Required Software."
 output ""
-sudo apt install nginx mysql-server php7.4-opcache php7.4-fpm php7.4-common php7.4-gd php7.4-mysql php7.4-imap php7.4-cli php7.4-cgi php7.4-curl php7.4-intl php7.4-pspell recode php7.4-sqlite3 php7.4-tidy php7.4-xmlrpc php7.4-xsl php7.4-memcache php7.4-imagick php7.4-zip php7.4-mbstring php-pear php-auth-sasl mcrypt imagemagick libruby memcached libgmp3-dev libmysqlclient-dev libcurl4-gnutls-dev libkrb5-dev libldap2-dev libidn11-dev gnutls-dev librtmp-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils sendmail git pwgen unzip libdb4.8-dev libdb4.8++-dev libssl-dev libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev libnghttp2-dev libpsl-dev tmux -y
+sudo apt install nginx mariadb-server php7.4-opcache php7.4-fpm php7.4-common php7.4-gd php7.4-mysql php7.4-imap php7.4-cli php7.4-cgi php7.4-curl php7.4-intl php7.4-pspell recode php7.4-sqlite3 php7.4-tidy php7.4-xmlrpc php7.4-xsl php7.4-memcache php7.4-imagick php7.4-zip php7.4-mbstring php-pear php-auth-sasl mcrypt imagemagick libruby memcached libgmp3-dev libmysqlclient-dev libcurl4-gnutls-dev libkrb5-dev libldap2-dev libidn11-dev gnutls-dev librtmp-dev build-essential libtool autotools-dev automake pkg-config libssl-dev libevent-dev bsdmainutils sendmail git pwgen unzip libdb4.8-dev libdb4.8++-dev libssl-dev libboost-all-dev libminiupnpc-dev libqt5gui5 libqt5core5a libqt5webkit5-dev libqt5dbus5 qttools5-dev qttools5-dev-tools libprotobuf-dev protobuf-compiler libqrencode-dev libnghttp2-dev libpsl-dev tmux -y
 output "Configuring Nginx server."
 output ""
 sudo rm -f /etc/nginx/sites-enabled/default
