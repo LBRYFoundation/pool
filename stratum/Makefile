@@ -29,16 +29,20 @@ OUTPUT=stratum
 
 CODEDIR1=algos
 CODEDIR2=sha3
+CODEDIR3=iniparser
 
-.PHONY: projectcode1 projectcode2
+.PHONY: projectcode1 projectcode2 projectcode3
 
-all: projectcode1 projectcode2 $(SOURCES) $(OUTPUT)
+all: projectcode1 projectcode2 projectcode3 $(SOURCES) $(OUTPUT)
 
 projectcode1:
 	$(MAKE) -C $(CODEDIR1)
 
 projectcode2:
 	$(MAKE) -C $(CODEDIR2)
+
+projectcode3:
+	$(MAKE) -C $(CODEDIR3)
 
 $(SOURCES): stratum.h util.h
 
