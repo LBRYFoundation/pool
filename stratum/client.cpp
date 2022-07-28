@@ -304,9 +304,15 @@ bool client_update_block(YAAMP_CLIENT *client, json_value *json_params)
 	}
 
 	int coinid = json_params->u.array.values[1]->u.integer;
-	if(!coinid) return false;
+	if(!coinid) {
+		debuglog("client_update_block(): object_find() coin id failed\n");
+		return false;
+	}
 	YAAMP_COIND *coind = (YAAMP_COIND *)object_find(&g_list_coind, coinid, true);
-	if(!coind) return false;
+	if(!coind) {
+		debuglog("client_update_block(): can't find coind for coinid:%d\n", coinid);
+		return false;
+	}
 
 	const char* hash = json_params->u.array.values[2]->u.string.ptr;
 
