@@ -319,8 +319,9 @@ bool client_update_block(YAAMP_CLIENT *client, json_value *json_params)
 	coind->newblock = true;
 	coind->notreportingcounter = 0;
 
-	if (!strcmp("DCR", coind->rpcencoding)) {
-		usleep(300*YAAMP_MS);
+	if (!strcmp("DCR", coind->rpcencoding) || !strcmp("LBC", coind->rpcencoding))
+	{
+		usleep(300 * YAAMP_MS);
 	}
 
 	block_confirm(coind->id, hash);
