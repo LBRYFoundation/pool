@@ -65,6 +65,7 @@ void stratumlog(const char *format, ...);
 void stratumlogdate(const char *format, ...);
 void clientlog(YAAMP_CLIENT *client, const char *format, ...);
 void rejectlog(const char *format, ...);
+void lbrylog(const char *format, ...);
 
 //////////////////////////////////////////////////////////////////////////
 
