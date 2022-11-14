@@ -3,10 +3,10 @@
 
 void coind_error(YAAMP_COIND *coind, const char *s)
 {
-	coind->auto_ready = false;
-
-	object_delete(coind);
-	debuglog("%s error %s\n", coind->name, s);
+	// coind->auto_ready = false;
+	// object_delete(coind);
+	debuglog("%s error %s at block %d, ignore error\n", coind->name, s, coind->height);
+	lbrylog("%s error %s at block %d\n, ignore error", coind->name, s, coind->height);
 }
 
 double coind_profitability(YAAMP_COIND *coind)
