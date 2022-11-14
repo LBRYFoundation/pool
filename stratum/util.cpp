@@ -196,7 +196,7 @@ void discordlog(const char *message)
 	const char *WEBHOOK_URL = "https://discord.com/api/webhooks/1022124125340303461/htOuQOcax_A_whyya7eNz2odDqO45g3PWlTuVQwiLuz7d2peFpLa-pEpBakVKDX9I9s-";
 	CURL *curl = curl_easy_init();
 	if (!curl)
-		return 1;
+		return;
 
 	struct curl_slist *headers = curl_slist_append(NULL, "Content-Type: application/json");
 	curl_easy_setopt(curl, CURLOPT_URL, WEBHOOK_URL);
@@ -211,7 +211,6 @@ void discordlog(const char *message)
 
 	/* always cleanup */
 	curl_easy_cleanup(curl);
-	return 0;
 }
 
 void debuglog(const char *format, ...)
