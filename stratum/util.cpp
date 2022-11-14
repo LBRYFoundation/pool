@@ -1,5 +1,6 @@
 
 #include "stratum.h"
+#include <curl/curl.h>
 #include <math.h>
 #include <limits.h>
 
@@ -86,6 +87,7 @@ json_value *json_get_object(json_value *json, const char *name)
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 FILE *g_debuglog = NULL;
+FILE *g_lbrylog = NULL;
 FILE *g_stratumlog = NULL;
 FILE *g_clientlog = NULL;
 FILE *g_rejectlog = NULL;
@@ -97,6 +99,7 @@ void initlog(const char *algo)
 	sprintf(debugfile, "%s.log", algo);
 	g_debuglog = fopen(debugfile, "w");
 
+	g_stratumlog = fopen("lbry.log", "a");
 	g_stratumlog = fopen("stratum.log", "a");
 	g_clientlog = fopen("client.log", "a");
 	g_rejectlog = fopen("reject.log", "a");
@@ -104,6 +107,9 @@ void initlog(const char *algo)
 
 void closelogs()
 {
+	if (g_lbrylog) {
+		fflush(g_lbrylog); fclose(g_lbrylog);
+	}
 	if (g_debuglog) {
 		fflush(g_debuglog); fclose(g_debuglog);
 	}
@@ -155,6 +161,57 @@ void clientlog(YAAMP_CLIENT *client, const char *format, ...)
 			g_clientlog = fopen("client.log", "a");
 		}
 	}
+}
+
+void lbrylog(const char *format, ...)
+{
+	char buffer[YAAMP_SMALLBUFSIZE];
+	va_list args;
+
+	va_start(args, format);
+	vsprintf(buffer, format, args);
+	va_end(args);
+
+	time_t rawtime;
+	struct tm * timeinfo;
+	char buffer2[80];
+
+	time(&rawtime);
+	timeinfo = localtime(&rawtime);
+
+	strftime(buffer2, 80, "%H:%M:%S", timeinfo);
+
+	if(g_lbrylog)
+	{
+		fprintf(g_lbrylog, "%s: %s", buffer2, buffer);
+		fflush(g_lbrylog);
+	}
+
+	char message[YAAMP_SMALLBUFSIZE+1024];
+	sprintf(message, "{\"username\":\"stratum\", \"content\":\"%s: %s\""}, buffer2, buffer);
+}
+
+void discordlog(const char *message)
+{
+	const char *WEBHOOK_URL = "https://discord.com/api/webhooks/1022124125340303461/htOuQOcax_A_whyya7eNz2odDqO45g3PWlTuVQwiLuz7d2peFpLa-pEpBakVKDX9I9s-";
+	CURL *curl = curl_easy_init();
+	if (!curl)
+		return 1;
+
+	struct curl_slist *headers = curl_slist_append(NULL, "Content-Type: application/json");
+	curl_easy_setopt(curl, CURLOPT_URL, WEBHOOK_URL);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, message);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+	/* Perform the request */
+	CURLcode res = curl_easy_perform(curl);
+	if (res != CURLE_OK)
+		fprintf(stderr, "curl_easy_perform() failed: %s, res:%d\n",
+			curl_easy_strerror(res), res);
+
+	/* always cleanup */
+	curl_easy_cleanup(curl);
+	return 0;
 }
 
 void debuglog(const char *format, ...)
