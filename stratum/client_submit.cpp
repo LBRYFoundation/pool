@@ -281,8 +281,8 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 				target_to_diff(coin_target), target_to_diff(hash_int),
 				hash1, submitvalues->hash_be, templ->has_segwit_txs);
 
-			if(!strcmp("DCR", coind->rpcencoding)) {
-				// delay between dcrd and dcrwallet
+			if(!strcmp("DCR", coind->rpcencoding) ||!strcmp("LBC", coind->rpcencoding)) {
+				// delay between dcrd/lbcd and dcrwallet/lbcwallet
 				sleep(1);
 			}
 

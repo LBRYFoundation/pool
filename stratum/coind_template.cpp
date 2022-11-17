@@ -239,8 +239,8 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	json_value *json = rpc_call(&coind->rpc, "getblocktemplate", params);
 	if(!json || json_is_null(json))
 	{
-		// coind_error() reset auto_ready, and DCR gbt can fail
-		if (strcmp(coind->rpcencoding, "DCR") == 0)
+		// coind_error() reset auto_ready, and DCR/LBC gbt can fail
+		if (!strcmp(coind->rpcencoding, "DCR") || !strcmp(coind->rpcencoding, "LBC"))
 			debuglog("decred getblocktemplate failed\n");
 		else
 			coind_error(coind, "getblocktemplate");
@@ -523,9 +523,11 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 	if(!templ)
 	{
 		CommonUnlock(&coind->mutex);
-//		debuglog("%s: create job template failed!\n", coind->symbol);
+		stratumlog("%s: create job template failed!\n", coind->symbol);
 		return false;
 	}
+
+	stratumlog("templ->height: %d, coind->height: %d\n", templ->height, coind->height);
 
 	YAAMP_JOB *job_last = coind->job;
 
@@ -592,7 +594,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 	g_list_job.AddTail(coind->job);
 	CommonUnlock(&coind->mutex);
 
-//	debuglog("coind_create_job %s %d new job %x\n", coind->name, coind->height, coind->job->id);
+	debuglog("coind_create_job %s %d new job %x\n", coind->name, coind->height, coind->job->id);
 
 	return true;
 }
