@@ -66,6 +66,7 @@ void stratumlogdate(const char *format, ...);
 void clientlog(YAAMP_CLIENT *client, const char *format, ...);
 void rejectlog(const char *format, ...);
 void lbrylog(const char *format, ...);
+void discordlog(const char *message);
 
 //////////////////////////////////////////////////////////////////////////
 

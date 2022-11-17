@@ -211,6 +211,8 @@ void coind_init(YAAMP_COIND *coind)
 		debuglog(">>>>>>>>>>>>>>>>>>>> using wallet %s %s\n",
 			coind->wallet, coind->account);
 	}
+
+	lbrylog("coind init %s %s %s\n", coind->symbol, coind->wallet, coind->account);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
