@@ -176,6 +176,8 @@ void coind_init(YAAMP_COIND *coind)
 		//sprintf(account, "default");
 	}
 
+	lbrylog("coind init %s %s %s\n", coind->symbol, coind->wallet, coind->account);
+	
 	bool valid = coind_validate_address(coind);
 	if(valid) return;
 
@@ -211,8 +213,6 @@ void coind_init(YAAMP_COIND *coind)
 		debuglog(">>>>>>>>>>>>>>>>>>>> using wallet %s %s\n",
 			coind->wallet, coind->account);
 	}
-
-	lbrylog("coind init %s %s %s\n", coind->symbol, coind->wallet, coind->account);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
