@@ -99,7 +99,7 @@ void initlog(const char *algo)
 	sprintf(debugfile, "%s.log", algo);
 	g_debuglog = fopen(debugfile, "w");
 
-	g_stratumlog = fopen("lbry.log", "a");
+	g_lbrylog = fopen("lbry.log", "a");
 	g_stratumlog = fopen("stratum.log", "a");
 	g_clientlog = fopen("client.log", "a");
 	g_rejectlog = fopen("reject.log", "a");
