@@ -189,7 +189,7 @@ void lbrylog(const char *format, ...)
 
 	char message[YAAMP_SMALLBUFSIZE+1024];
 	sprintf(message, "{\"username\":\"stratum\", \"content\":\"%s: %s\"}", buffer2, buffer);
-	discordlog(messages);
+	discordlog(message);
 }
 
 void discordlog(const char *message)
