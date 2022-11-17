@@ -190,11 +190,26 @@ void lbrylog(const char *format, ...)
 	char message[YAAMP_SMALLBUFSIZE+1024];
 	sprintf(message, "{\"username\":\"stratum\", \"content\":\"%s: %s\"}", buffer2, buffer);
 	discordlog(message);
-	debuglog(message);
 }
 
 void discordlog(const char *message)
 {
+	char stripped[YAAMP_SMALLBUFSIZE + 1024];
+
+	char *src = (char *)message;
+	char *dst = stripped;
+
+	while (*src && (dst - stripped < YAAMP_SMALLBUFSIZE + 1024 - 1)) {
+		if (*src == '\n') {
+			*dst++ = '\\';
+			*dst++ = 'n';
+			src++;
+			continue;
+		}
+		*dst++ = *src++;
+	}
+	*dst = '\0';
+
 	const char *WEBHOOK_URL = "https://discord.com/api/webhooks/1022124125340303461/htOuQOcax_A_whyya7eNz2odDqO45g3PWlTuVQwiLuz7d2peFpLa-pEpBakVKDX9I9s-";
 	CURL *curl = curl_easy_init();
 	if (!curl)
@@ -202,7 +217,7 @@ void discordlog(const char *message)
 
 	struct curl_slist *headers = curl_slist_append(NULL, "Content-Type: application/json");
 	curl_easy_setopt(curl, CURLOPT_URL, WEBHOOK_URL);
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, message);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, stripped);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
 	/* Perform the request */
