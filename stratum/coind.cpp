@@ -177,7 +177,7 @@ void coind_init(YAAMP_COIND *coind)
 	}
 
 	lbrylog("coind init %s %s %s\n", coind->symbol, coind->wallet, coind->account);
-	discordlog("coind init %s %s %s\n", coind->symbol, coind->wallet, coind->account);
+	discordlog("Stratum Starting, Coind init");
 	
 	bool valid = coind_validate_address(coind);
 	if(valid) return;
