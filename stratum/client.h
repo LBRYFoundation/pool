@@ -1,13 +1,3 @@
-
-//struct YAAMP_SOURCE
-//{
-//public:
-//	int count;
-//	double speed;
-//
-//	char ip[64];
-//};
-
 struct YAAMP_ALGO
 {
 	char name[64];
@@ -31,14 +21,13 @@ struct YAAMP_CLIENT_ALGO
 
 #define YAAMP_JOB_MAXHISTORY	16
 
-#define MIN_ADDRESS_LEN 30 /* BTC len can be as few as 26 chars, but gen. 33 or 34 */
-#define MAX_ADDRESS_LEN 35 /* DCR */
+#define MIN_ADDRESS_LEN 30 /* LBC Base58 is 34 chars, Bech32 lbc1... is 43-63 chars */
+#define MAX_ADDRESS_LEN 64
 
 class YAAMP_CLIENT: public YAAMP_OBJECT
 {
 public:
 	YAAMP_SOCKET *sock;
-//	YAAMP_SOURCE *source;
 
 	char notify_id[1024];
 	int64_t reqid; // ask request id
@@ -63,7 +52,6 @@ public:
 	char worker[1024];
 
 	double difficulty_actual;
-	double difficulty_remote;
 	double difficulty_written;
 	bool difficulty_fixed;
 
@@ -164,6 +152,3 @@ bool client_auth_by_workers(YAAMP_CLIENT *client);
 void *client_thread(void *p);
 
 void db_check_user_input(char* input);
-
-//void source_prune();
-

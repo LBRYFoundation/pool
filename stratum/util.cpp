@@ -1,4 +1,3 @@
-
 #include "stratum.h"
 #include <math.h>
 #include <limits.h>
@@ -7,7 +6,8 @@
 
 bool json_get_bool(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return false;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value->u.boolean;
@@ -18,7 +18,8 @@ bool json_get_bool(json_value *json, const char *name)
 
 json_int_t json_get_int(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return 0;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value->u.integer;
@@ -29,7 +30,8 @@ json_int_t json_get_int(json_value *json, const char *name)
 
 double json_get_double(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return 0;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value->u.dbl;
@@ -40,7 +42,8 @@ double json_get_double(json_value *json, const char *name)
 
 const char *json_get_string(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return NULL;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value->u.string.ptr;
@@ -51,9 +54,9 @@ const char *json_get_string(json_value *json, const char *name)
 
 json_value *json_get_array(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return NULL;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
-//		if(json->u.object.values[i].value->type == json_array && !strcmp(json->u.object.values[i].name, name))
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value;
 	}
@@ -61,20 +64,10 @@ json_value *json_get_array(json_value *json, const char *name)
 	return NULL;
 }
 
-//json_value *json_get_array_from_array(json_value *json, const char *name)
-//{
-//	for(int i=0; i<json->u.array.length; i++)
-//	{
-//		if(!strcmp(json->u.array.values[i].name, name))
-//			return json->u.array.values[i].value;
-//	}
-//
-//	return NULL;
-//}
-
 json_value *json_get_object(json_value *json, const char *name)
 {
-	for(int i=0; i<json->u.object.length; i++)
+	if(!json || json->type != json_object) return NULL;
+	for(unsigned int i=0; i<json->u.object.length; i++)
 	{
 		if(!strcmp(json->u.object.values[i].name, name))
 			return json->u.object.values[i].value;
@@ -94,7 +87,7 @@ void initlog(const char *algo)
 {
 	char debugfile[1024];
 
-	sprintf(debugfile, "%s.log", algo);
+	snprintf(debugfile, sizeof(debugfile), "%s.log", algo);
 	g_debuglog = fopen(debugfile, "w");
 
 	g_stratumlog = fopen("stratum.log", "a");
@@ -124,7 +117,7 @@ void clientlog(YAAMP_CLIENT *client, const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	time_t rawtime;
@@ -137,7 +130,7 @@ void clientlog(YAAMP_CLIENT *client, const char *format, ...)
 	strftime(buffer2, 80, "%Y-%m-%d %H:%M:%S", timeinfo);
 
 	char buffer3[YAAMP_SMALLBUFSIZE];
-	sprintf(buffer3, "%s [%s] %s, %s, %s\n", buffer2, client->sock->ip, client->username, g_current_algo->name, buffer);
+	snprintf(buffer3, sizeof(buffer3), "%s [%s] %s, %s, %s\n", buffer2, client->sock->ip, client->username, g_current_algo->name, buffer);
 
 	printf("%s", buffer3);
 	if(g_debuglog)
@@ -150,7 +143,6 @@ void clientlog(YAAMP_CLIENT *client, const char *format, ...)
 	{
 		fprintf(g_clientlog, "%s", buffer3);
 		if (fflush(g_clientlog) == EOF) {
-			// reopen if wiped
 			fclose(g_clientlog);
 			g_clientlog = fopen("client.log", "a");
 		}
@@ -163,7 +155,7 @@ void debuglog(const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	time_t rawtime;
@@ -191,7 +183,7 @@ void debuglog_hex(void *data, int len)
 	for(int i=0; i < len; i++)
 		sprintf(hex+strlen(hex), "%02x", bin[i]);
 	strcpy(hex+strlen(hex), "\n");
-	debuglog(hex);
+	debuglog("%s", hex);
 	free(hex);
 }
 
@@ -201,7 +193,7 @@ void stratumlog(const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	time_t rawtime;
@@ -243,7 +235,7 @@ void stratumlogdate(const char *format, ...)
 	strftime(date, 16, "%Y-%m-%d", timeinfo);
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	stratumlog("%s %s", date, buffer);
@@ -314,8 +306,8 @@ const char *header_value(const char *data, const char *search, char *value)
 		return value;
 	}
 
-	strncpy(value, p, min(1024, p2 - p));
-	value[min(1023, p2 - p)] = 0;
+	strncpy(value, p, min(1024, (int)(p2 - p)));
+	value[min(1023, (int)(p2 - p))] = 0;
 
 	return value;
 }
@@ -390,7 +382,7 @@ void base64_decode(char *normal, const char *base64)
 		if(base64[i] == '=')
 			break;
 
-		unsigned char digit = decoding_tab[base64[i]];
+		unsigned char digit = decoding_tab[(unsigned char)base64[i]];
 
 		current <<= 6;
 		current |= digit;
@@ -475,8 +467,6 @@ void ser_number(int n, char *a)
 		sprintf(tmp, "%02x", s[i]);
 		strcat(a, tmp);
 	}
-
-//	printf("ser_number %d, %s\n", n, a);
 }
 
 void ser_string_be(const char *input, char *output, int len)
@@ -515,7 +505,7 @@ uint64_t diff_to_target(double difficulty)
 {
 	if(!difficulty) return 0;
 
-	uint64_t t = 0x0000ffff00000000*g_current_algo->diff_multiplier/difficulty;
+	uint64_t t = 0x0000ffff00000000ULL * g_current_algo->diff_multiplier / difficulty;
 	return t;
 }
 
@@ -523,7 +513,7 @@ double target_to_diff(uint64_t target)
 {
 	if(!target) return 0;
 
-	double d = (double)0x0000ffff00000000/target;
+	double d = (double)0x0000ffff00000000ULL / target;
 	return d;
 }
 
@@ -546,23 +536,9 @@ uint64_t decode_compact(const char *input)
 		nShift--;
 	}
 
-	uint64_t v = 0x0000ffff00000000/d;
-//	debuglog("decode_compact %s -> %f -> %016llx\n", input, d, v);
-
-//	int nbytes = (c >> 24) & 0xFF;
-//
-//	nbytes -= 25;
-//	v = (c & 0xFFFFFF) << (8 * nbytes);
-//
-//	debuglog("decode_compact %s -> %016llx\n", input, v);
+	uint64_t v = 0x0000ffff00000000ULL / d;
 	return v;
 }
-
-//def uint256_from_compact(c):
-//    c = int(c)
-//    nbytes = (c >> 24) & 0xFF
-//    v = (c & 0xFFFFFFL) << (8 * (nbytes - 3))
-//    return v
 
 uint64_t get_hash_difficulty(unsigned char *input)
 {
@@ -578,87 +554,59 @@ uint64_t get_hash_difficulty(unsigned char *input)
 		(uint64_t)p[23] << 8 |
 		(uint64_t)p[22] << 0;
 
-//	char toto[1024];
-//	hexlify(toto, input, 32);
-//	debuglog("hash diff %s %016llx\n", toto, v);
 	return v;
 }
 
 unsigned int htoi(const char *s)
 {
-    unsigned int val = 0;
-    int x = 0;
+	unsigned int val = 0;
+	int x = 0;
 
-    if(s[x] == '0' && (s[x+1] == 'x' || s[x+1] == 'X'))
-    	x += 2;
+	if(s[x] == '0' && (s[x+1] == 'x' || s[x+1] == 'X'))
+		x += 2;
 
-    while(s[x])
-    {
-       if(val > UINT_MAX)
-    	   return 0;
+	while(s[x])
+	{
+		if(s[x] >= '0' && s[x] <='9')
+			val = val * 16 + s[x] - '0';
+		else if(s[x]>='A' && s[x] <='F')
+			val = val * 16 + s[x] - 'A' + 10;
+		else if(s[x]>='a' && s[x] <='f')
+			val = val * 16 + s[x] - 'a' + 10;
+		else
+			return 0;
 
-       else if(s[x] >= '0' && s[x] <='9')
-          val = val * 16 + s[x] - '0';
+		x++;
+	}
 
-       else if(s[x]>='A' && s[x] <='F')
-          val = val * 16 + s[x] - 'A' + 10;
-
-       else if(s[x]>='a' && s[x] <='f')
-          val = val * 16 + s[x] - 'a' + 10;
-
-       else
-    	   return 0;
-
-       x++;
-    }
-
-    return val;
+	return val;
 }
 
 uint64_t htoi64(const char *s)
 {
 	uint64_t val = 0;
-    int x = 0;
+	int x = 0;
 
-    if(s[x] == '0' && (s[x+1] == 'x' || s[x+1] == 'X'))
-    	x += 2;
+	if(s[x] == '0' && (s[x+1] == 'x' || s[x+1] == 'X'))
+		x += 2;
 
-    while(s[x])
-    {
-       if(val > ULLONG_MAX)
-    	   return 0;
+	while(s[x])
+	{
+		if(s[x] >= '0' && s[x] <='9')
+			val = val * 16 + s[x] - '0';
+		else if(s[x]>='A' && s[x] <='F')
+			val = val * 16 + s[x] - 'A' + 10;
+		else if(s[x]>='a' && s[x] <='f')
+			val = val * 16 + s[x] - 'a' + 10;
+		else
+			return 0;
 
-       else if(s[x] >= '0' && s[x] <='9')
-          val = val * 16 + s[x] - '0';
+		x++;
+	}
 
-       else if(s[x]>='A' && s[x] <='F')
-          val = val * 16 + s[x] - 'A' + 10;
-
-       else if(s[x]>='a' && s[x] <='f')
-          val = val * 16 + s[x] - 'a' + 10;
-
-       else
-    	   return 0;
-
-       x++;
-    }
-
-    return val;
+	return val;
 }
 
-#if 0
-// gettimeofday seems deprecated in POSIX
-long long current_timestamp()
-{
-	long long milliseconds;
-	struct timeval te;
-
-	gettimeofday(&te, NULL);
-
-	milliseconds = te.tv_sec*1000LL + te.tv_usec/1000;
-	return milliseconds;
-}
-#else
 long long current_timestamp()
 {
 	long long milliseconds;
@@ -669,9 +617,8 @@ long long current_timestamp()
 	milliseconds = 1000LL*te.tv_sec + round(te.tv_nsec/1e6);
 	return milliseconds;
 }
-#endif
 
-long long current_timestamp_dms() // allow 0.1 ms time
+long long current_timestamp_dms()
 {
 	long long dms;
 	struct timespec te;
@@ -708,15 +655,14 @@ int resident_size()
 void string_lower(char *s)
 {
 	for(int i = 0; s[i]; i++)
-	  s[i] = tolower(s[i]);
+		s[i] = tolower(s[i]);
 }
 
 void string_upper(char *s)
 {
 	for(int i = 0; s[i]; i++)
-	  s[i] = toupper(s[i]);
+		s[i] = toupper(s[i]);
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////
 
@@ -768,4 +714,3 @@ void sha256_hash_hex(const char *input, char *output, unsigned int len)
 	sha256_hash(input, output1, len);
 	hexlify(output, (unsigned char *)output1, 32);
 }
-

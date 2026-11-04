@@ -1,4 +1,3 @@
-
 #include "stratum.h"
 
 // sql injection security, unwanted chars
@@ -16,17 +15,13 @@ void db_check_coin_symbol(YAAMP_DB *db, char* symbol)
 	if (!symbol) return;
 	size_t len = strlen(symbol);
 	if (len >= 2 && len <= 12) {
-#ifdef NO_EXCHANGE
 		db_query(db, "SELECT symbol FROM coins WHERE installed AND algo='%s' AND symbol='%s'", g_stratum_algo, symbol);
-#else
-		db_query(db, "SELECT symbol FROM coins WHERE installed AND (symbol='%s' OR symbol2='%s')", symbol, symbol);
-#endif
 		MYSQL_RES *result = mysql_store_result(&db->mysql);
 		*symbol = '\0';
 		if (!result) return;
 		MYSQL_ROW row = mysql_fetch_row(result);
-		if (row) {
-			strcpy(symbol, row[0]);
+		if (row && row[0]) {
+			snprintf(symbol, 16, "%s", row[0]);
 		}
 		mysql_free_result(result);
 	} else {
@@ -78,7 +73,6 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 		}
 	}
 
-	// debuglog("user %s %s gives %d %\n", client->username, symbol, gift);
 	db_query(db, "SELECT id, is_locked, logtraffic, coinid, donation FROM accounts WHERE username='%s'", client->username);
 
 	MYSQL_RES *result = mysql_store_result(&db->mysql);
@@ -92,7 +86,7 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 
 		client->logtraffic = row[2] && atoi(row[2]);
 		client->coinid = row[3] ? atoi(row[3]) : 0;
-		if (gift == -1) gift = row[4] ? atoi(row[4]) : 0; // keep current
+		if (gift == -1) gift = row[4] ? atoi(row[4]) : 0;
 	}
 
 	mysql_free_result(result);
@@ -115,9 +109,9 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 
 	else {
 		db_query(db, "UPDATE accounts SET coinsymbol='%s', swap_time=%u, donation=%d, hostaddr='%s' WHERE id=%d AND balance = 0"
-			" AND (SELECT COUNT(id) FROM payouts WHERE account_id=%d AND tx IS NULL) = 0" // failed balance
-			" AND (SELECT pending FROM balanceuser WHERE userid=%d ORDER by time DESC LIMIT 1) = 0" // pending balance
-			, symbol, (uint) time(NULL), gift, client->sock->ip, client->userid, client->userid, client->userid);
+			" AND (SELECT COUNT(id) FROM payouts WHERE account_id=%d AND tx IS NULL) = 0"
+			" AND (SELECT pending FROM balanceuser WHERE userid=%d ORDER by time DESC LIMIT 1) = 0"
+			, symbol, (unsigned int)time(NULL), gift, client->sock->ip, client->userid, client->userid, client->userid);
 		if (mysql_affected_rows(&db->mysql) > 0 && strlen(symbol)) {
 			debuglog("%s: %s coinsymbol set to %s ip %s uid (%d)\n",
 				g_current_algo->name, client->username, symbol, client->sock->ip, client->userid);
@@ -150,7 +144,6 @@ void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client)
 	db_check_user_input(client->password);
 	db_check_user_input(client->worker);
 
-	// strip for recent mysql defaults (error if fields are too long)
 	if (strlen(client->password) > 64)
 		clientlog(client, "password too long truncated: %s", client->password);
 	if (strlen(client->version) > 64)
@@ -162,7 +155,7 @@ void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client)
 	strncpy(version, client->version, 64);
 	strncpy(worker, client->worker, 64);
 
-	db_query(db, "INSERT INTO workers (userid, ip, name, difficulty, version, password, worker, algo, time, pid) "\
+	db_query(db, "INSERT INTO workers (userid, ip, name, difficulty, version, password, worker, algo, time, pid) "
 		"VALUES (%d, '%s', '%s', %f, '%s', '%s', '%s', '%s', %d, %d)",
 		client->userid, client->sock->ip, client->username, client->difficulty_actual,
 		version, password, worker, g_stratum_algo, now, getpid());
@@ -196,7 +189,6 @@ void db_update_workers(YAAMP_DB *db)
 		client->difficulty_written = client->difficulty_actual;
 	}
 
-	//client_sort();
 	g_list_client.Leave();
 }
 
@@ -211,4 +203,3 @@ void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client)
 		db_query(db, "UPDATE accounts SET coinid=%d WHERE id=%d AND IFNULL(coinid,0) = 0",
 			client->coinid, client->userid);
 }
-

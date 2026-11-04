@@ -1,4 +1,3 @@
-
 #include "stratum.h"
 #include <mysql/mysqld_error.h>
 #include <signal.h>
@@ -43,6 +42,7 @@ void db_close(YAAMP_DB *db)
 
 char *db_clean_string(YAAMP_DB *db, char *string)
 {
+	if (!string) return string;
 	char *c = string;
 	size_t i, len = strlen(string) & 0x1FF;
 	for (i = 0; i < len; i++) {
@@ -51,6 +51,11 @@ char *db_clean_string(YAAMP_DB *db, char *string)
 		bool issepch = (c[i] == '=' || c[i] == ',' || c[i] == ';' || c[i] == '.');
 		bool isextra = (c[i] == '/' || c[i] == '-' || c[i] == '_');
 		if (!isdigit && !isalpha && !issepch && !isextra) { c[i] = '\0'; break; }
+	}
+	if (db) {
+		char raw[512] = { 0 };
+		strncpy(raw, string, sizeof(raw) - 1);
+		mysql_real_escape_string(&db->mysql, string, raw, strlen(raw));
 	}
 	return string;
 }
@@ -70,14 +75,28 @@ static void clean_html(char* string)
 
 void db_query(YAAMP_DB *db, const char *format, ...)
 {
-	va_list arglist;
+	if(!db || !format) return;
+
+	va_list arglist, arglist_copy;
 	va_start(arglist, format);
-	if(!db) return;
+	va_copy(arglist_copy, arglist);
 
-	char *buffer = (char *)malloc(YAAMP_SMALLBUFSIZE+strlen(format));
-	if(!buffer) return;
+	int required_len = vsnprintf(NULL, 0, format, arglist_copy);
+	va_end(arglist_copy);
 
-	int len = vsprintf(buffer, format, arglist);
+	if (required_len < 0) {
+		va_end(arglist);
+		return;
+	}
+
+	size_t buf_size = (size_t)required_len + 1;
+	char *buffer = (char *)malloc(buf_size);
+	if(!buffer) {
+		va_end(arglist);
+		return;
+	}
+
+	vsnprintf(buffer, buf_size, format, arglist);
 	va_end(arglist);
 
 	while(!g_exiting)
@@ -87,8 +106,8 @@ void db_query(YAAMP_DB *db, const char *format, ...)
 		res = mysql_errno(&db->mysql);
 
 		stratumlog("SQL ERROR: %d, %s\n", res, mysql_error(&db->mysql));
-		if(res == ER_DUP_ENTRY) break; // rarely seen on new user creation
-		if(res != CR_SERVER_GONE_ERROR && res != CR_SERVER_LOST) exit(1);
+		if(res == ER_DUP_ENTRY) break;
+		if(res != CR_SERVER_GONE_ERROR && res != CR_SERVER_LOST) break;
 
 		usleep(100*YAAMP_MS);
 		db_reconnect(db);
@@ -126,12 +145,12 @@ void db_update_algos(YAAMP_DB *db)
 		db_query(db, "UPDATE algos SET overflow=true WHERE name='%s'", g_stratum_algo);
 	}
 
-	char symbol[16] = "NULL\0";
+	char symbol[32] = "NULL";
 	if(g_list_coind.count == 1) {
 		if (g_list_coind.first) {
 			CLI li = g_list_coind.first;
 			YAAMP_COIND *coind = (YAAMP_COIND *)li->data;
-			sprintf(symbol,"'%s'", coind->symbol);
+			snprintf(symbol, sizeof(symbol), "'%s'", coind->symbol);
 		}
 	}
 
@@ -213,13 +232,13 @@ void db_update_coinds(YAAMP_DB *db)
 			coind->newcoind = true;
 			coind->newblock = true;
 			coind->id = atoi(row[0]);
-			coind->aux.coind = coind;
 		}
 		else
 			coind->newcoind = false;
 
-		strcpy(coind->name, row[1]);
-		strcpy(coind->symbol, row[20]);
+		snprintf(coind->name, sizeof(coind->name), "%s", row[1] ? row[1] : "");
+		snprintf(coind->symbol, sizeof(coind->symbol), "%s", row[20] ? row[20] : "");
+
 		// optional coin filters
 		if(coind->newcoind) {
 			bool ignore = false;
@@ -231,32 +250,30 @@ void db_update_coinds(YAAMP_DB *db)
 			}
 		}
 
-		if(row[7]) strcpy(coind->wallet, row[7]);
-		if(row[6]) strcpy(coind->rpcencoding, row[6]);
-		if(row[6]) coind->pos = strcasecmp(row[6], "POS")? false: true;
+		if(row[7]) snprintf(coind->wallet, sizeof(coind->wallet), "%s", row[7]);
+		if(row[6]) snprintf(coind->rpcencoding, sizeof(coind->rpcencoding), "%s", row[6]);
 		if(row[10]) coind->hassubmitblock = atoi(row[10]);
 
 		coind->rpc.ssl = 0;
-		// deprecated method to set ssl and cert (before db specific fields)
 		if(row[2]) {
 			char buffer[1024];
 			char cert[1024];
-			strcpy(buffer, row[2]);
-			// sample ssl host : "https://mycert@127.0.0.1"
+			snprintf(buffer, sizeof(buffer), "%s", row[2]);
 			if (strstr(buffer, "https://") != NULL) {
-				strcpy(buffer, row[2] + 8);
+				snprintf(buffer, sizeof(buffer), "%s", row[2] + 8);
 				if (strstr(buffer, "@") != NULL) {
-					int p = (strstr(buffer, "@") - buffer);
-					strcpy(cert, buffer); cert[p] = '\0';
-					strcpy(buffer, row[2] + 8 + p + 1);
+					int p = (int)(strstr(buffer, "@") - buffer);
+					strncpy(cert, buffer, sizeof(cert) - 1);
+					cert[p] = '\0';
+					snprintf(buffer, sizeof(buffer), "%s", row[2] + 8 + p + 1);
 				} else {
 					strcpy(cert, "yiimp");
 				}
 				coind->rpc.ssl = 1;
-				sprintf(coind->rpc.cert, "/usr/share/ca-certificates/%s.crt", cert);
+				snprintf(coind->rpc.cert, sizeof(coind->rpc.cert), "/usr/share/ca-certificates/%s.crt", cert);
 			}
 			strcpy(coind->rpc.cert, "");
-			strcpy(coind->rpc.host, buffer);
+			snprintf(coind->rpc.host, sizeof(coind->rpc.host), "%s", buffer);
 		}
 
 		if(row[3]) coind->rpc.port = atoi(row[3]);
@@ -264,7 +281,7 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[4] && row[5])
 		{
 			char buffer[1024];
-			sprintf(buffer, "%s:%s", row[4], row[5]);
+			snprintf(buffer, sizeof(buffer), "%s:%s", row[4], row[5]);
 
 			base64_encode(coind->rpc.credential, buffer);
 			coind->rpc.coind = coind;
@@ -277,12 +294,11 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[13]) coind->auto_ready = atoi(row[13]);
 		if(row[15]) coind->pool_ttf = atoi(row[15]);
 
-		if(row[16]) strcpy(coind->charity_address, row[16]);
+		if(row[16]) snprintf(coind->charity_address, sizeof(coind->charity_address), "%s", row[16]);
 		if(row[17]) coind->charity_amount = atof(row[17]);
 		if(row[18]) coind->charity_percent = atof(row[18]);
 		if(row[19]) coind->reward_mul = atof(row[19]);
-
-		if(row[21]) coind->isaux = atoi(row[21]);
+		if(coind->reward_mul <= 0) coind->reward_mul = 1.0;
 
 		if(row[22] && row[23]) coind->actual_ttf = min(atoi(row[22]), atoi(row[23]));
 		else if(row[22]) coind->actual_ttf = atoi(row[22]);
@@ -292,14 +308,14 @@ void db_update_coinds(YAAMP_DB *db)
 		if(row[24]) coind->usememorypool = atoi(row[24]);
 		if(row[25]) coind->hasmasternodes = atoi(row[25]);
 
-		if(row[26]) strcpy(coind->algo, row[26]);
-		if(row[27]) strcpy(coind->symbol2, row[27]); // if pool + aux, prevent double submit
+		if(row[26]) snprintf(coind->algo, sizeof(coind->algo), "%s", row[26]);
+		if(row[27]) snprintf(coind->symbol2, sizeof(coind->symbol2), "%s", row[27]);
 
 		if(row[28]) coind->rpc.curl = atoi(row[28]) != 0;
 		if(row[29]) coind->rpc.ssl = atoi(row[29]) != 0;
-		if(row[30]) strcpy(coind->rpc.cert, row[30]);
+		if(row[30]) snprintf(coind->rpc.cert, sizeof(coind->rpc.cert), "%s", row[30]);
 
-		if(row[31]) strcpy(coind->account, row[31]);
+		if(row[31]) snprintf(coind->account, sizeof(coind->account), "%s", row[31]);
 		if(row[32]) coind->multialgos = atoi(row[32]);
 		if(row[33] && atoi(row[33]) > 0) g_stratum_max_cons = atoi(row[33]);
 		if(row[34] && atol(row[34]) > 0) g_max_shares = atol(row[34]);
@@ -307,32 +323,12 @@ void db_update_coinds(YAAMP_DB *db)
 
 		if(coind->usesegwit) g_stratum_segwit = true;
 
-		// force the right rpcencoding for DCR
-		if(!strcmp(coind->symbol, "DCR") && strcmp(coind->rpcencoding, "DCR"))
-			strcpy(coind->rpcencoding, "DCR");
-
-		// old dash masternodes coins..
-		if(coind->hasmasternodes) {
-			if (strcmp(coind->symbol, "ALQO") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "BSD") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "BWK") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "CHC") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "CRW") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "DNR") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "FLAX") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "ITZ") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "J") == 0 || strcmp(coind->symbol2, "J") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "LAX") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "MAG") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "PBS") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "URALS") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "VSX") == 0) coind->oldmasternodes = true;
-			if (strcmp(coind->symbol, "XLR") == 0) coind->oldmasternodes = true;
-		}
+		// Ensure LBC has rpcencoding set to LBC if empty
+		if(!strcmp(coind->symbol, "LBC") && !strlen(coind->rpcencoding))
+			strcpy(coind->rpcencoding, "LBC");
 
 		////////////////////////////////////////////////////////////////////////////////////////////////////
 
-		//coind->touch = true;
 		if(coind->newcoind)
 		{
 			debuglog("connecting to coind %s\n", coind->symbol);
@@ -372,173 +368,6 @@ void db_update_coinds(YAAMP_DB *db)
 	g_list_coind.Leave();
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-void db_update_remotes(YAAMP_DB *db)
-{
-	if(!db) return;
-
-	db_query(db, "select id, speed/1000000, host, port, username, password, time, price, renterid from jobs where active and ready and algo='%s' order by time", g_stratum_algo);
-
-	MYSQL_RES *result = mysql_store_result(&db->mysql);
-	if(!result) yaamp_error("Cant query database");
-
-	MYSQL_ROW row;
-
-	g_list_remote.Enter();
-	while((row = mysql_fetch_row(result)) != NULL)
-	{
-		if(!row[0] || !row[1] || !row[2] || !row[3] || !row[4] || !row[5] || !row[6] || !row[7]) continue;
-		bool newremote = false;
-
-		YAAMP_REMOTE *remote = (YAAMP_REMOTE *)object_find(&g_list_remote, atoi(row[0]));
-		if(!remote)
-		{
-			remote = new YAAMP_REMOTE;
-			memset(remote, 0, sizeof(YAAMP_REMOTE));
-
-			remote->id = atoi(row[0]);
-			newremote = true;
-		}
-
-//		else if(remote->reset_balance)
-//			continue;
-
-		else if(row[6] && atoi(row[6]) > remote->updated)
-			remote->status = YAAMP_REMOTE_RESET;
-
-		remote->speed = atof(row[1]);
-		strcpy(remote->host, row[2]);
-		remote->port = atoi(row[3]);
-		strcpy(remote->username, row[4]);
-		strcpy(remote->password, row[5]);
-		remote->updated = atoi(row[6]);
-		remote->price = atof(row[7]);
-		remote->touch = true;
-		remote->submit_last = NULL;
-
-		int renterid = row[8]? atoi(row[8]): 0;
-		if(renterid && !remote->renter)
-			remote->renter = (YAAMP_RENTER *)object_find(&g_list_renter, renterid);
-
-		if(newremote)
-		{
-			if(remote->renter && remote->renter->balance <= 0.00001000)
-			{
-				debuglog("dont load that job %d\n", remote->id);
-				delete remote;
-				continue;
-			}
-
-			pthread_t thread;
-
-			pthread_create(&thread, NULL, remote_thread, remote);
-			pthread_detach(thread);
-
-			g_list_remote.AddTail(remote);
-			usleep(100*YAAMP_MS);
-		}
-
-		if(remote->renter)
-		{
-			if(!strcmp(g_current_algo->name, "sha256"))
-				remote->speed = min(remote->speed, max(remote->renter->balance/g_current_algo->rent*100000000, 1));
-			else
-				remote->speed = min(remote->speed, max(remote->renter->balance/g_current_algo->rent*100000, 1));
-		}
-	}
-
-	mysql_free_result(result);
-
-	///////////////////////////////////////////////////////////////////////////////////////////
-
-	for(CLI li = g_list_remote.first; li; li = li->next)
-	{
-		YAAMP_REMOTE *remote = (YAAMP_REMOTE *)li->data;
-//		if(remote->reset_balance && remote->renter)
-//		{
-//			db_query(db, "update renters set balance=0 where id=%d", remote->renter->id);
-//			db_query(db, "update jobs set ready=false, active=false where renterid=%d", remote->renter->id);
-//
-//			remote->reset_balance = false;
-//		}
-
-		if(remote->deleted) continue;
-
-		if(remote->kill)
-		{
-			debuglog("******* kill that sucka %s\n", remote->host);
-
-			pthread_cancel(remote->thread);
-			object_delete(remote);
-
-			continue;
-		}
-
-		if(remote->sock && remote->sock->last_read && remote->sock->last_read+120<time(NULL))
-		{
-			debuglog("****** timeout %s\n", remote->host);
-
-			remote->status = YAAMP_REMOTE_TERMINATE;
-			remote->kill = true;
-
-			remote_close(remote);
-			continue;
-		}
-
-		if(!remote->touch)
-		{
-			remote->status = YAAMP_REMOTE_TERMINATE;
-			continue;
-		}
-
-		remote->touch = false;
-
-		if(remote->difficulty_written != remote->difficulty_actual)
-		{
-			remote->difficulty_written = remote->difficulty_actual;
-			db_query(db, "update jobs set difficulty=%f where id=%d", remote->difficulty_actual, remote->id);
-		}
-	}
-
-//	remote_sort();
-	g_list_remote.Leave();
-}
-
-void db_update_renters(YAAMP_DB *db)
-{
-	if(!db) return;
-
-	db_query(db, "select id, balance, updated from renters");
-
-	MYSQL_RES *result = mysql_store_result(&db->mysql);
-	if(!result) yaamp_error("Cant query database");
-
-	MYSQL_ROW row;
-	g_list_renter.Enter();
-
-	while((row = mysql_fetch_row(result)) != NULL)
-	{
-		if(!row[0] || !row[1]) continue;
-
-		YAAMP_RENTER *renter = (YAAMP_RENTER *)object_find(&g_list_renter, atoi(row[0]));
-		if(!renter)
-		{
-			renter = new YAAMP_RENTER;
-			memset(renter, 0, sizeof(YAAMP_RENTER));
-
-			renter->id = atoi(row[0]);
-			g_list_renter.AddTail(renter);
-		}
-
-		if(row[1]) renter->balance = atof(row[1]);
-		if(row[2]) renter->updated = atoi(row[2]);
-	}
-
-	mysql_free_result(result);
-	g_list_renter.Leave();
-}
-
 ///////////////////////////////////////////////////////////////////////
 
 static void _json_str_safe(YAAMP_DB *db, json_value *json, const char *key, size_t maxlen, char* out)
@@ -549,7 +378,7 @@ static void _json_str_safe(YAAMP_DB *db, json_value *json, const char *key, size
 		char str[128] = { 0 };
 		char escaped[256] = { 0 };
 		snprintf(str, sizeof(str)-1, "%s", json_string_value(val));
-		str[maxlen-1] = '\0'; // truncate to dest len
+		str[maxlen-1] = '\0';
 		clean_html(str);
 		mysql_real_escape_string(&db->mysql, escaped, str, strlen(str));
 		snprintf(out, maxlen, "%s", escaped);
@@ -573,7 +402,6 @@ static double json_double_safe(json_value *json, const char *key)
 void db_store_stats(YAAMP_DB *db, YAAMP_CLIENT *client, json_value *stats)
 {
 	int t = time(NULL);
-	json_value *algo, *val;
 	char sdev[80], stype[8], svid[12], sarch[8];
 	char salgo[32], sclient[48], sdriver[32], sos[8];
 	double khashes, intensity, throughput;
@@ -583,17 +411,16 @@ void db_store_stats(YAAMP_DB *db, YAAMP_CLIENT *client, json_value *stats)
 
 	json_str_safe(stats, "algo", salgo);
 	if (strcasecmp(g_current_algo->name, salgo) && client->submit_bad) {
-	//	debuglog("stats: wrong algo used %s != %s", salgo, g_current_algo->name);
 		return;
 	}
 
 	json_str_safe(stats, "device", sdev);
 	json_str_safe(stats, "type", stype);
 	json_str_safe(stats, "vendorid", svid);
-	json_str_safe(stats, "arch", sarch); // or cpu best feature
+	json_str_safe(stats, "arch", sarch);
 	json_str_safe(stats, "client", sclient);
 	json_str_safe(stats, "os", sos);
-	json_str_safe(stats, "driver", sdriver); // or cpu compiler
+	json_str_safe(stats, "driver", sdriver);
 
 	power = json_int_safe(stats, "power");
 	freq  = json_int_safe(stats, "freq");

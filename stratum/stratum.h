@@ -57,12 +57,9 @@ typedef void (*YAAMP_HASH_FUNCTION)(const char *, char *, uint32_t);
 extern CommonList g_list_coind;
 extern CommonList g_list_client;
 extern CommonList g_list_job;
-extern CommonList g_list_remote;
-extern CommonList g_list_renter;
 extern CommonList g_list_share;
 extern CommonList g_list_worker;
 extern CommonList g_list_block;
-extern CommonList g_list_submit;
 extern CommonList g_list_source;
 
 extern int g_tcp_port;
@@ -80,6 +77,7 @@ extern char g_stratum_coin_include[256];
 extern char g_stratum_coin_exclude[256];
 
 extern char g_stratum_algo[256];
+extern char g_stratum_coinbase_sig[128];
 extern double g_stratum_difficulty;
 extern double g_stratum_min_diff;
 extern double g_stratum_max_diff;
@@ -87,7 +85,6 @@ extern double g_stratum_max_diff;
 extern int g_stratum_max_cons;
 extern int g_stratum_max_ttf;
 extern bool g_stratum_reconnect;
-extern bool g_stratum_renting;
 extern bool g_stratum_segwit;
 extern int g_limit_txs_per_block;
 
@@ -99,7 +96,6 @@ extern bool g_debuglog_hash;
 extern bool g_debuglog_socket;
 extern bool g_debuglog_rpc;
 extern bool g_debuglog_list;
-extern bool g_debuglog_remote;
 
 extern uint64_t g_max_shares;
 extern uint64_t g_shares_counter;
@@ -122,7 +118,6 @@ extern volatile bool g_exiting;
 #include "rpc.h"
 #include "job.h"
 #include "coind.h"
-#include "remote.h"
 #include "share.h"
 
 extern YAAMP_DB *g_db;
@@ -139,81 +134,10 @@ extern "C"
 {
 void sha256_hash(const char *input, char *output, unsigned int len);
 void sha256_double_hash(const char *input, char *output, unsigned int len);
-
-void scrypt_1024_1_1_256(const unsigned char *input, unsigned char *output);
-void scrypt_N_R_1_256(const char* input, char* output, uint32_t N, uint32_t R, uint32_t len);
 }
 
 void sha256_hash_hex(const char *input, char *output, unsigned int len);
 void sha256_double_hash_hex(const char *input, char *output, unsigned int len);
 
-#include "algos/a5a.h"
-#include "algos/c11.h"
-#include "algos/x11.h"
-#include "algos/x11evo.h"
-#include "algos/x12.h"
-#include "algos/x13.h"
-#include "algos/x14.h"
-#include "algos/x15.h"
-#include "algos/x16r.h"
-#include "algos/x16rv2.h"
-#include "algos/x16s.h"
-#include "algos/x17.h"
-#include "algos/x22i.h"
-#include "algos/xevan.h"
-#include "algos/hmq17.h"
-#include "algos/nist5.h"
-#include "algos/fresh.h"
-#include "algos/hsr14.h"
-#include "algos/quark.h"
-#include "algos/neoscrypt.h"
-#include "algos/allium.h"
-#include "algos/lyra2re.h"
-#include "algos/lyra2v2.h"
-#include "algos/lyra2v3.h"
-#include "algos/lyra2z.h"
-#include "algos/lyra2zz.h"
-#include "algos/blake.h"
-#include "algos/blakecoin.h"
-#include "algos/blake2b.h"
-#include "algos/blake2s.h"
-#include "algos/qubit.h"
-#include "algos/groestl.h"
-#include "algos/jha.h"
-#include "algos/skein.h"
-#include "algos/keccak.h"
-#include "algos/sha256t.h"
-#include "algos/sha256q.h"
-#include "algos/skunk.h"
-#include "algos/timetravel.h"
-#include "algos/bitcore.h"
-
-#include "algos/bastion.h"
-#include "algos/bmw.h"
-#include "algos/deep.h"
-#include "algos/lbk3.h"
+#include "algos/sha256.h"
 #include "algos/lbry.h"
-#include "algos/luffa.h"
-#include "algos/pentablake.h"
-#include "algos/rainforest.h"
-#include "algos/whirlpool.h"
-#include "algos/whirlpoolx.h"
-#include "algos/skein2.h"
-#include "algos/yescrypt.h"
-#include "algos/zr5.h"
-#include "algos/hive.h"
-#include "algos/sib.h"
-#include "algos/m7m.h"
-#include "algos/phi.h"
-#include "algos/phi2.h"
-#include "algos/polytimos.h"
-#include "algos/sonoa.h"
-#include "algos/tribus.h"
-#include "algos/veltor.h"
-#include "algos/velvet.h"
-#include "algos/argon2a.h"
-#include "algos/vitalium.h"
-#include "algos/aergo.h"
-#include "algos/hex.h"
-#include "algos/argon2d-dyn.h"
-#include "algos/exosis.h"

@@ -1,7 +1,12 @@
-
 #include "stratum.h"
 
-//#define RPC_DEBUGLOG_
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+#ifndef MSG_MORE
+#define MSG_MORE 0
+#endif
 
 bool rpc_connected(YAAMP_RPC *rpc)
 {
@@ -13,20 +18,25 @@ bool rpc_connect(YAAMP_RPC *rpc)
 	rpc_close(rpc);
 	if(g_exiting) return false;
 
-	struct hostent *ent = gethostbyname(rpc->host);
-	if(!ent) return false;
+	struct addrinfo hints, *res_info = NULL;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
 
-	struct sockaddr_in serv;
+	char port_str[16];
+	snprintf(port_str, sizeof(port_str), "%d", rpc->port);
 
-	serv.sin_family = AF_INET;
-	serv.sin_port = htons(rpc->port);
+	if(getaddrinfo(rpc->host, port_str, &hints, &res_info) != 0 || !res_info)
+		return false;
 
-	bcopy((char *)ent->h_addr, (char *)&serv.sin_addr.s_addr, ent->h_length);
+	rpc->sock = socket(res_info->ai_family, res_info->ai_socktype, res_info->ai_protocol);
+	if(rpc->sock <= 0) {
+		freeaddrinfo(res_info);
+		return false;
+	}
 
-	rpc->sock = socket(AF_INET, SOCK_STREAM, 0);
-	if(rpc->sock <= 0) return false;
-
-	int res = connect(rpc->sock, (struct sockaddr *)&serv, sizeof(serv));
+	int res = connect(rpc->sock, res_info->ai_addr, res_info->ai_addrlen);
+	freeaddrinfo(res_info);
 	if(res < 0)
 	{
 		rpc_close(rpc);
@@ -101,7 +111,7 @@ int rpc_send(YAAMP_RPC *rpc, const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	int bytes = strlen(buffer);
@@ -120,13 +130,12 @@ char *rpc_do_call(YAAMP_RPC *rpc, char const *data)
 {
 	CommonLock(&rpc->mutex);
 
-	// HTTP 1.1 accepts chunked data, and keep the connection
 	rpc_send(rpc, "POST / HTTP/1.1\r\n");
 	rpc_send(rpc, "Authorization: Basic %s\r\n", rpc->credential);
 	rpc_send(rpc, "Host: %s:%d\n", rpc->host, rpc->port);
 	rpc_send(rpc, "Accept: */*\r\n");
 	rpc_send(rpc, "Content-Type: application/json\r\n");
-	rpc_send(rpc, "Content-Length: %d\r\n\r\n", strlen(data));
+	rpc_send(rpc, "Content-Length: %zu\r\n\r\n", strlen(data));
 
 	int res = rpc_flush(rpc);
 	if(res <= 0)
@@ -233,7 +242,6 @@ char *rpc_do_call(YAAMP_RPC *rpc, char const *data)
 	header_value(buffer, "Connection:", tmp);
 	if(strcmp(tmp, "close") == 0)
 	{
-	//	debuglog("closing connection from %s:%d\n", rpc->host, rpc->port);
 		rpc_connect(rpc);
 	}
 
@@ -242,25 +250,23 @@ char *rpc_do_call(YAAMP_RPC *rpc, char const *data)
 
 json_value *rpc_call(YAAMP_RPC *rpc, char const *method, char const *params)
 {
-//	debuglog("rpc_call :%d %s\n", rpc->port, method);
-
 #ifdef HAVE_CURL
 	if (rpc->ssl || rpc->curl)
 		return rpc_curl_call(rpc, method, params);
 #endif
 
-	int s1 = current_timestamp();
+	long long s1 = current_timestamp();
 	if(!rpc_connected(rpc)) return NULL;
 
-	int paramlen = params? strlen(params): 0;
+	int paramlen = params ? strlen(params) : 0;
 
 	char *message = (char *)malloc(paramlen+1024);
 	if(!message) return NULL;
 
 	if(params)
-		sprintf(message, "{\"method\":\"%s\",\"params\":%s,\"id\":\"%d\"}", method, params, ++rpc->id);
+		snprintf(message, paramlen+1024, "{\"method\":\"%s\",\"params\":%s,\"id\":\"%d\"}", method, params, ++rpc->id);
 	else
-		sprintf(message, "{\"method\":\"%s\",\"id\":\"%d\"}", method, ++rpc->id);
+		snprintf(message, paramlen+1024, "{\"method\":\"%s\",\"id\":\"%d\"}", method, ++rpc->id);
 
 	char *buffer = rpc_do_call(rpc, message);
 
@@ -275,9 +281,9 @@ json_value *rpc_call(YAAMP_RPC *rpc, char const *method, char const *params)
 	}
 	free(buffer);
 
-	int s2 = current_timestamp();
+	long long s2 = current_timestamp();
 	if(s2-s1 > 2000)
-		debuglog("delay rpc_call %s:%d %s in %d ms\n", rpc->host, rpc->port, method, s2-s1);
+		debuglog("delay rpc_call %s:%d %s in %lld ms\n", rpc->host, rpc->port, method, s2-s1);
 
 	if(json->type != json_object)
 	{
@@ -287,7 +293,3 @@ json_value *rpc_call(YAAMP_RPC *rpc, char const *method, char const *params)
 
 	return json;
 }
-
-
-
-

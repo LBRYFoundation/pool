@@ -1,5 +1,8 @@
-
 #include "stratum.h"
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 bool socket_connected(YAAMP_SOCKET *s)
 {
@@ -25,8 +28,6 @@ void socket_real_ip(YAAMP_SOCKET *s)
 		inet_ntop(AF_INET, &hdr.v2.addr.ip4.src_addr, s->ip, 64);
 		s->port = ntohs(hdr.v2.addr.ip4.src_port);
 
-		// we need to consume the appropriate amount of data from the socket
-		// read the buffer without PEEK'ing so that we begin at the real data later in socket_nextjson
 		size = 16 + ntohs(hdr.v2.len);
 		do {
 			ret = recv(s->sock, &hdr, size, 0);
@@ -34,12 +35,12 @@ void socket_real_ip(YAAMP_SOCKET *s)
 		return;
 	}
 	else {
-		// not received any proxy header
 		struct sockaddr_in name;
 		socklen_t len = sizeof(name);
 		memset(&name, 0, len);
 
 		int res = getpeername(s->sock, (struct sockaddr *)&name, &len);
+		(void)res;
 		inet_ntop(AF_INET, &name.sin_addr, s->ip, 64);
 
 		res = getsockname(s->sock, (struct sockaddr *)&name, &len);
@@ -60,9 +61,11 @@ YAAMP_SOCKET *socket_initialize(int sock)
 	s->sock = sock;
 
 	setsockopt(s->sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+#ifdef SO_NOSIGPIPE
+	int set = 1;
+	setsockopt(s->sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int));
+#endif
 
-//	yaamp_create_mutex(&s->mutex);
-//	pthread_mutex_lock(&s->mutex);
 	if (!g_handle_haproxy_ips) {
 		int res = 0;
 		struct sockaddr_in name;
@@ -70,6 +73,7 @@ YAAMP_SOCKET *socket_initialize(int sock)
 		memset(&name, 0, len);
 
 		res = getpeername(s->sock, (struct sockaddr *)&name, &len);
+		(void)res;
 		inet_ntop(AF_INET, &name.sin_addr, s->ip, 64);
 
 		res = getsockname(s->sock, (struct sockaddr *)&name, &len);
@@ -90,9 +94,6 @@ void socket_close(YAAMP_SOCKET *s)
 	if(!s) return;
 	if(s->sock) close(s->sock);
 
-//	pthread_mutex_unlock(&s->mutex);
-//	pthread_mutex_destroy(&s->mutex);
-
 	s->sock = 0;
 	delete s;
 }
@@ -101,8 +102,6 @@ json_value *socket_nextjson(YAAMP_SOCKET *s, YAAMP_CLIENT *client)
 {
 	while(!strchr(s->buffer, '}') && s->buflen<YAAMP_SOCKET_BUFSIZE-1)
 	{
-	//	pthread_mutex_unlock(&s->mutex);
-
 		int len = recv(s->sock, s->buffer+s->buflen, YAAMP_SOCKET_BUFSIZE-s->buflen-1, 0);
 		if(len <= 0) return NULL;
 
@@ -114,8 +113,6 @@ json_value *socket_nextjson(YAAMP_SOCKET *s, YAAMP_CLIENT *client)
 
 		if(client && client->logtraffic)
 			stratumlog("recv: %d\n", s->buflen);
-
-	//	pthread_mutex_lock(&s->mutex);
 	}
 
 	char *b = strchr(s->buffer, '{');
@@ -130,9 +127,8 @@ json_value *socket_nextjson(YAAMP_SOCKET *s, YAAMP_CLIENT *client)
 
 	char *p = strchr(b, '}');
 	if (p) {
-		// buffer can contain multiple queries
 		if(!strchr(p, '{')) p = strrchr(b, '}');
-		else { p = strchr(p, '{'); p--; };
+		else { p = strchr(p, '{'); p--; }
 	}
 
 	if(!p)
@@ -174,9 +170,6 @@ json_value *socket_nextjson(YAAMP_SOCKET *s, YAAMP_CLIENT *client)
 
 		s->buflen = s->buflen - (p - s->buffer);
 		s->buffer[s->buflen] = 0;
-
-//		if(client && client->logtraffic)
-//			stratumlog("still: %s\n", s->buffer);
 	}
 	else
 	{
@@ -203,7 +196,7 @@ int socket_send(YAAMP_SOCKET *s, const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	if(!s) {
@@ -211,18 +204,6 @@ int socket_send(YAAMP_SOCKET *s, const char *format, ...)
 		return -1;
 	}
 
-//	json_value *json = json_parse(buffer, strlen(buffer));
-//	if(!json)
-//		debuglog("sending bad json message: %s\n", buffer);
-//	else
-//		json_value_free(json);
-
-//	pthread_mutex_lock(&s->mutex);
 	int res = socket_send_raw(s, buffer, strlen(buffer));
-//	pthread_mutex_unlock(&s->mutex);
 	return res;
 }
-
-
-
-

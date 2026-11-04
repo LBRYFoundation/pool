@@ -1,4 +1,3 @@
-
 #include "stratum.h"
 
 static int g_extraonce1_counter = 0;
@@ -44,18 +43,20 @@ YAAMP_CLIENT *client_find_notify_id(const char *notify_id, bool reconnecting)
 
 void client_sort()
 {
-	for(CLI li = g_list_client.first; li && li->next; li = li->next)
+	bool swapped = true;
+	while(swapped)
 	{
-		YAAMP_CLIENT *client1 = (YAAMP_CLIENT *)li->data;
-		YAAMP_CLIENT *client2 = (YAAMP_CLIENT *)li->next->data;
-
-//		if(client2->difficulty_actual > client1->difficulty_actual)
-		if(client2->speed > client1->speed*1.5)
+		swapped = false;
+		for(CLI li = g_list_client.first; li && li->next; li = li->next)
 		{
-			g_list_client.Swap(li, li->next);
-			client_sort();
+			YAAMP_CLIENT *client1 = (YAAMP_CLIENT *)li->data;
+			YAAMP_CLIENT *client2 = (YAAMP_CLIENT *)li->next->data;
 
-			return;
+			if(client2->speed > client1->speed*1.5)
+			{
+				g_list_client.Swap(li, li->next);
+				swapped = true;
+			}
 		}
 	}
 }
@@ -65,9 +66,9 @@ int client_send_error(YAAMP_CLIENT *client, int error, const char *string)
 	char buffer3[1024];
 
 	if(client->id_str)
-		sprintf(buffer3, "\"%s\"", client->id_str);
+		snprintf(buffer3, sizeof(buffer3), "\"%s\"", client->id_str);
 	else
-		sprintf(buffer3, "%d", client->id_int);
+		snprintf(buffer3, sizeof(buffer3), "%d", client->id_int);
 
 	return socket_send(client->sock, "{\"id\":%s,\"result\":false,\"error\":[%d,\"%s\",null]}\n", buffer3, error, string);
 }
@@ -78,15 +79,15 @@ int client_send_result(YAAMP_CLIENT *client, const char *format, ...)
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	char buffer3[1024];
 
 	if(client->id_str)
-		sprintf(buffer3, "\"%s\"", client->id_str);
+		snprintf(buffer3, sizeof(buffer3), "\"%s\"", client->id_str);
 	else
-		sprintf(buffer3, "%d", client->id_int);
+		snprintf(buffer3, sizeof(buffer3), "%d", client->id_int);
 
 	return socket_send(client->sock, "{\"id\":%s,\"result\":%s,\"error\":null}\n", buffer3, buffer);
 }
@@ -97,7 +98,7 @@ int client_call(YAAMP_CLIENT *client, const char *method, const char *format, ..
 	va_list args;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
 	return socket_send(client->sock, "{\"id\":null,\"method\":\"%s\",\"params\":%s}\n", method, buffer);
@@ -110,13 +111,13 @@ int client_ask(YAAMP_CLIENT *client, const char *method, const char *format, ...
 	int64_t id = client->shares;
 
 	va_start(args, format);
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
-	int ret = socket_send(client->sock, "{\"id\":%d,\"method\":\"%s\",\"params\":%s}\n", id, method, buffer);
+	int ret = socket_send(client->sock, "{\"id\":%lld,\"method\":\"%s\",\"params\":%s}\n", (long long)id, method, buffer);
 	if (ret == -1) {
 		debuglog("unable to ask %s\n", method);
-		return 0; // -errno
+		return 0;
 	}
 	client->reqid = id;
 	return id;
@@ -125,32 +126,32 @@ int client_ask(YAAMP_CLIENT *client, const char *method, const char *format, ...
 void client_block_ip(YAAMP_CLIENT *client, const char *reason)
 {
 	char buffer[1024];
-	sprintf(buffer, "iptables -A INPUT -s %s -p tcp --dport %d -j REJECT", client->sock->ip, g_tcp_port);
+	snprintf(buffer, sizeof(buffer), "iptables -A INPUT -s %s -p tcp --dport %d -j REJECT", client->sock->ip, g_tcp_port);
 	if(strcmp("0.0.0.0", client->sock->ip) == 0) return;
 	if(strstr(client->sock->ip, "192.168.")) return;
 	if(strstr(client->sock->ip, "127.0.0.")) return;
 
 	int s = system(buffer);
+	(void)s;
 	stratumlog("%s: %s blocked (%s)\n", g_stratum_algo, client->sock->ip, reason);
 }
 
 void client_block_ipset(YAAMP_CLIENT *client, const char *ipset_name)
 {
 	char buffer[1024];
-	sprintf(buffer, "ipset -q -A %s %s", ipset_name, client->sock->ip);
+	snprintf(buffer, sizeof(buffer), "ipset -q -A %s %s", ipset_name, client->sock->ip);
 	if(strcmp("0.0.0.0", client->sock->ip) == 0) return;
 	if(strstr(client->sock->ip, "192.168.")) return;
 	if(strstr(client->sock->ip, "127.0.0.")) return;
 
 	int s = system(buffer);
+	(void)s;
 	stratumlog("%s: %s blocked via ipset %s %s\n", g_stratum_algo, client->sock->ip, ipset_name, client->username);
 }
 
 bool client_reset_multialgo(YAAMP_CLIENT *client, bool first)
 {
-//	return false;
 	if(!client->algos_subscribed[0].algo) return false;
-//	debuglog("client_reset_multialgo\n");
 
 	YAAMP_CLIENT_ALGO *best = NULL;
 	YAAMP_CLIENT_ALGO *current = NULL;
@@ -183,11 +184,6 @@ bool client_reset_multialgo(YAAMP_CLIENT *client, bool first)
 		int e = time(NULL) - client->last_best;
 		double d = best->algo->profit*best->factor - current->algo->profit*current->factor;
 		double p = d/best->algo->profit/best->factor;
-#ifdef DEBUG_BEST_MULTI
-		debuglog("current %s %f\n", current->algo->name, current->algo->profit*current->factor);
-		debuglog("best    %s %f\n", best->algo->name, best->algo->profit*best->factor);
-		debuglog(" %d * %f = %f --- percent %f %f\n", e, d, e*d, p, e*p);
-#endif
 		if(p < 0.02) return false;
 		if(e*p < 100) return false;
 	}
@@ -230,11 +226,11 @@ bool client_initialize_multialgo(YAAMP_CLIENT *client)
 			YAAMP_ALGO *algo = &g_algos[i];
 			if(!strcmp(algo->name, p))
 			{
-				int i=0;
-				for(; i<YAAMP_MAXALGOS-1 && client->algos_subscribed[i].algo; i++);
+				int j=0;
+				for(; j<YAAMP_MAXALGOS-1 && client->algos_subscribed[j].algo; j++);
 
-				client->algos_subscribed[i].algo = algo;
-				client->algos_subscribed[i].factor = value? value: algo->factor;
+				client->algos_subscribed[j].algo = algo;
+				client->algos_subscribed[j].factor = value? value: algo->factor;
 			}
 		}
 
@@ -255,10 +251,7 @@ void client_add_job_history(YAAMP_CLIENT *client, int jobid)
 
 	bool b = client_find_job_history(client, jobid, 0);
 	if(b)
-	{
-//		debuglog("ERROR history already added job %x\n", jobid);
 		return;
-	}
 
 	for(int i=YAAMP_JOB_MAXHISTORY-1; i>0; i--)
 		client->job_history[i] = client->job_history[i-1];
@@ -271,12 +264,7 @@ bool client_find_job_history(YAAMP_CLIENT *client, int jobid, int startat)
 	for(int i=startat; i<YAAMP_JOB_MAXHISTORY; i++)
 	{
 		if(client->job_history[i] == jobid)
-		{
-//			if(!startat)
-//				debuglog("job %x already sent, index %d\n", jobid, i);
-
 			return true;
-		}
 	}
 
 	return false;
@@ -284,38 +272,30 @@ bool client_find_job_history(YAAMP_CLIENT *client, int jobid, int startat)
 
 int hostname_to_ip(const char *hostname , char* ip)
 {
-    struct hostent *he;
-    struct in_addr **addr_list;
-    int i;
+	struct addrinfo hints, *res = NULL;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
 
-    if(hostname[0]>='0' && hostname[0]<='9')
-    {
-    	strcpy(ip, hostname);
-    	return 0;
-    }
+	if(hostname[0]>='0' && hostname[0]<='9')
+	{
+		strcpy(ip, hostname);
+		return 0;
+	}
 
-    if ( (he = gethostbyname( hostname ) ) == NULL)
-    {
-        // get the host info
-        herror("gethostbyname");
-        return 1;
-    }
+	if(getaddrinfo(hostname, NULL, &hints, &res) != 0 || !res)
+	{
+		return 1;
+	}
 
-    addr_list = (struct in_addr **) he->h_addr_list;
-
-    for(i = 0; addr_list[i] != NULL; i++)
-    {
-        //Return the first one;
-        strcpy(ip, inet_ntoa(*addr_list[i]));
-        return 0;
-    }
-
-    return 1;
+	struct sockaddr_in *addr = (struct sockaddr_in *)res->ai_addr;
+	inet_ntop(AF_INET, &(addr->sin_addr), ip, INET_ADDRSTRLEN);
+	freeaddrinfo(res);
+	return 0;
 }
 
 bool client_find_my_ip(const char *name)
 {
-//	return false;
 	char ip[1024] = "";
 
 	hostname_to_ip(name, ip);
@@ -339,10 +319,3 @@ bool client_find_my_ip(const char *name)
 
 	return false;
 }
-
-
-
-
-
-
-

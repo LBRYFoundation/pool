@@ -99,8 +99,21 @@ bool base58_decode(const char *input, char *output)
 
 bool is_base58(char *input)
 {
-	// All alphanumeric characters except "0", "O", "I" and "l"
-	size_t i=0, len = strlen(input);
+	size_t i = 0, len = strlen(input);
+	if (len == 0) return false;
+
+	// Allow LBRY Bech32 addresses (lbc1..., tlbc1..., rlbc1...) to pass character check;
+	// full validation is performed via lbcd/lbcwallet validateaddress RPC.
+	if (strncmp(input, "lbc1", 4) == 0 || strncmp(input, "tlbc1", 5) == 0 || strncmp(input, "rlbc1", 5) == 0) {
+		for (i = 0; i < len; i++) {
+			char ch = input[i];
+			bool is_lower_alnum = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z');
+			if (!is_lower_alnum) return false;
+		}
+		return true;
+	}
+
+	// Standard Base58: alphanumeric characters except "0", "O", "I" and "l"
 	char *c = input;
 	while (i < len) {
 		bool isdigit = (c[i] >= '1' && c[i] <= '9');
@@ -111,4 +124,3 @@ bool is_base58(char *input)
 	}
 	return true;
 }
-

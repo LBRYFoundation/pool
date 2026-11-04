@@ -1,9 +1,4 @@
-
-#define MAX_AUXS	32
-
-class YAAMP_REMOTE;
 class YAAMP_COIND;
-class YAAMP_COIND_AUX;
 
 struct YAAMP_JOB_VALUES
 {
@@ -27,10 +22,6 @@ struct YAAMP_JOB_TEMPLATE
 	char prevhash_hex[512];
 	char prevhash_be[512];
 
-	char extradata_hex[512];
-	char extradata_be[512];
-
-	// todo: can use extra field
 	char claim_hex[128];
 	char claim_be[128];
 
@@ -58,9 +49,6 @@ struct YAAMP_JOB_TEMPLATE
 
 	bool has_filtered_txs;
 	int filtered_txs_fee;
-
-	int auxs_size;
-	YAAMP_COIND_AUX *auxs[MAX_AUXS];
 };
 
 #define YAAMP_JOB_MAXSUBIDS		200
@@ -77,8 +65,7 @@ public:
 	double maxspeed;
 	double profit;
 
-	YAAMP_COIND *coind;			// either one of them
-	YAAMP_REMOTE *remote;
+	YAAMP_COIND *coind;
 	YAAMP_JOB_TEMPLATE *templ;
 
 	bool remote_subids[YAAMP_JOB_MAXSUBIDS];
@@ -109,9 +96,6 @@ bool job_can_mine(YAAMP_JOB *job);
 void job_reset_clients(YAAMP_JOB *job=NULL);
 bool job_has_free_client();
 
-//YAAMP_JOB_TEMPLATE *job_create_template(YAAMP_COIND *coind);
-//void job_create_last(YAAMP_COIND *coind, bool force=false);
-
 /////////////////////////
 
 void job_send_jobid(YAAMP_CLIENT *client, int jobid);
@@ -125,15 +109,4 @@ void job_signal();
 void job_update();
 void job_init();
 
-
 void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *json_result);
-
-vector<string> coind_aux_hashlist(YAAMP_COIND_AUX **auxs, int size);
-vector<string> coind_aux_merkle_branch(YAAMP_COIND_AUX **auxs, int size, int index);
-void coind_aux_build_auxs(YAAMP_JOB_TEMPLATE *templ);
-
-
-
-
-
-

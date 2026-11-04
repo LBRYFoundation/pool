@@ -1,97 +1,97 @@
-// Copyright (c) 2015-2017 YiiMP
-
-// Sample blocknotify wrapper tool compatible with decred notifications
-// will call the standard bin/blocknotify yiimp tool on new block event.
-
-// Note: this tool is connected directly to dcrd, not to the wallet!
+// Copyright (c) 2015-2026 YiiMP / LBRY Pool
+//
+// WebSocket blocknotify daemon for lbcd (https://github.com/lbryfoundation/lbcd).
+// Connects directly to lbcd's WebSocket RPC endpoint (`ws`), listens for
+// blockconnected notifications, computes the 112-byte LBRY block header double-SHA256
+// block hash, and invokes the `blocknotify` binary to notify the LBRY Stratum server.
 
 package main
 
 import (
-	"io/ioutil"
+	"crypto/sha256"
+	"encoding/hex"
+	"flag"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 
-	"bytes" // dcrd > 0.6+
-	"github.com/decred/dcrd/wire"
-
-	"github.com/decred/dcrrpcclient"
-//	"github.com/decred/dcrutil"
+	"github.com/btcsuite/btcd/rpcclient"
 )
 
-const (
-	processName = "blocknotify"    // set the full path if required
-	stratumDest = "yaamp.com:3252" // stratum host:port
-	coinId = "1574"                // decred database coin id
+// computeLbryBlockHash computes the double-SHA256 block hash (reversed to big-endian hex)
+// of a serialized 112-byte LBRY block header.
+func computeLbryBlockHash(header []byte) string {
+	if len(header) > 112 {
+		header = header[:112]
+	}
+	first := sha256.Sum256(header)
+	second := sha256.Sum256(first[:])
 
-	dcrdUser = "yiimprpc"
-	dcrdPass = "myDcrdPassword"
-
-	debug = false
-)
+	// Reverse bytes to standard big-endian display order
+	for i, j := 0, len(second)-1; i < j; i, j = i+1, j-1 {
+		second[i], second[j] = second[j], second[i]
+	}
+	return hex.EncodeToString(second[:])
+}
 
 func main() {
-	// Only override the handlers for notifications you care about.
-	// Also note most of these handlers will only be called if you register
-	// for notifications.  See the documentation of the dcrrpcclient
-	// NotificationHandlers type for more details about each handler.
-	ntfnHandlers := dcrrpcclient.NotificationHandlers{
+	var (
+		processName = flag.String("bin", "blocknotify", "Path to blocknotify executable")
+		stratumDest = flag.String("stratum", "127.0.0.1:3334", "Stratum host:port")
+		coinID      = flag.String("coinid", "1", "LBC database coin ID")
+		lbcdHost    = flag.String("host", "127.0.0.1:9245", "lbcd RPC host:port")
+		lbcdUser    = flag.String("user", "lbcdrpc", "lbcd RPC username")
+		lbcdPass    = flag.String("pass", "", "lbcd RPC password")
+		certFile    = flag.String("cert", "rpc.cert", "Path to lbcd TLS rpc.cert")
+		debug       = flag.Bool("debug", false, "Enable verbose logging")
+	)
+	flag.Parse()
 
+	ntfnHandlers := rpcclient.NotificationHandlers{
 		OnBlockConnected: func(blockHeader []byte, transactions [][]byte) {
-			// log.Printf("Block bytes: %v %v", blockHeader, transactions)
-			var bhead wire.BlockHeader
-			err := bhead.Deserialize(bytes.NewReader(blockHeader))
-			if err == nil {
-				str := bhead.BlockHash().String();
-				args := []string{ stratumDest, coinId, str }
-				out, err := exec.Command(processName, args...).Output()
-				if err != nil {
-					log.Printf("err %s", err)
-				} else if debug {
-					log.Printf("out %s", out)
-				}
-				if (debug) {
-					log.Printf("Block connected: %s", str)
-				}
+			if len(blockHeader) < 112 {
+				log.Printf("ignoring short block header (%d bytes)", len(blockHeader))
+				return
+			}
+			blockHash := computeLbryBlockHash(blockHeader)
+			args := []string{*stratumDest, *coinID, blockHash}
+			out, err := exec.Command(*processName, args...).Output()
+			if err != nil {
+				log.Printf("blocknotify error: %v", err)
+			} else if *debug && len(out) > 0 {
+				log.Printf("blocknotify output: %s", out)
+			}
+			if *debug {
+				log.Printf("LBC block connected: %s", blockHash)
 			}
 		},
-
 	}
 
-	// Connect to local dcrd RPC server using websockets.
-	// dcrdHomeDir := dcrutil.AppDataDir("dcrd", false)
-	// folder := dcrdHomeDir
-	folder := ""
-	certs, err := ioutil.ReadFile(filepath.Join(folder, "rpc.cert"))
+	certs, err := os.ReadFile(filepath.Clean(*certFile))
 	if err != nil {
 		certs = nil
-		log.Printf("%s, trying without TLS...", err)
+		log.Printf("%v, connecting without TLS...", err)
 	}
 
-	connCfg := &dcrrpcclient.ConnConfig{
-		Host:         "127.0.0.1:9109",
-		Endpoint:     "ws", // websocket
-
-		User:         dcrdUser,
-		Pass:         dcrdPass,
-
-		DisableTLS: (certs == nil),
+	connCfg := &rpcclient.ConnConfig{
+		Host:         *lbcdHost,
+		Endpoint:     "ws",
+		User:         *lbcdUser,
+		Pass:         *lbcdPass,
+		DisableTLS:   certs == nil,
 		Certificates: certs,
 	}
 
-	client, err := dcrrpcclient.New(connCfg, &ntfnHandlers)
+	client, err := rpcclient.New(connCfg, &ntfnHandlers)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	// Register for block connect and disconnect notifications.
 	if err := client.NotifyBlocks(); err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("NotifyBlocks: Registration Complete")
+	log.Println("lbcd NotifyBlocks: registration complete")
 
-	// Wait until the client either shuts down gracefully (or the user
-	// terminates the process with Ctrl+C).
 	client.WaitForShutdown()
 }
