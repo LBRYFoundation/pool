@@ -1,99 +1,115 @@
-# Lbry Mining Pool based on Yiimp
-# Home Codebase of [LBRYPool](https://lbrypool.net)
+# LBRY Pool
 
+A mining pool for [LBRY Credits (LBC)](https://lbry.com), based on [Yiimp](https://github.com/tpruvot/yiimp).
+This is the codebase behind [LBRYPool](https://lbrypool.net).
 
-### TODO: Rewrite this README, Rewrite Install Script to be more logical, Do it all again to document the hax. Be sure to rewrite things to use TMUX and document as such.
+> **Use at your own risk.** This is a fork of long-unmaintained software. Review the
+> code and the install script before running them on a server that holds funds.
 
+## Components
 
-## Prerequisites:
-1. Ubuntu 18.04
-2. Install Script (Provided in this repo)
+| Path | Description |
+| --- | --- |
+| `web/` | PHP (Yii 1) front end and admin panel, plus the backend loops (`main.sh`, `loop2.sh`, `blocks.sh`) |
+| `stratum/` | C++ stratum server (LBRY algorithm only) |
+| `blocknotify/` | Small client that tells the stratum a new block was found (run by `lbrycrdd`) |
+| `sql/` | Database schema and migrations |
+| `install.sh` | Automated installer for a fresh server |
 
-WARNINGS
-- Use at your own risks.
+## Requirements
 
-The install Script will install the pool and all dependencies needed.
+- Ubuntu 18.04 or newer. The installer is only tested on 18.04, which is end-of-life.
+- PHP 7.4. PHP 8.x is not supported yet (see the open issues).
+- A dedicated server or VPS. Run the installer as a non-root user with `sudo` rights.
 
-TO INSTALL:
-1. Log in to your server
-2. Create new user - sudo adduser (username)
-3. Add user to sudo group - sudo adduser (username) sudo
-4. Log in to new user - sudo su (username)
-5. cd ~/
-6. `wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh`
-7. Follow the instructions on the screen.
-8. sudo bash pool-start.sh
+## Installation
 
-This will setup the pool ready for coin daemons to be added.
+1. Log in to your server and create a user with sudo rights:
 
-You can find sample config files in web/serverconfig.sample.php and web/keys.sample.php
+   ```sh
+   sudo adduser <username>
+   sudo adduser <username> sudo
+   sudo su - <username>
+   ```
 
+2. Download and run the installer, then follow the prompts:
 
-You need at least three backend shells (in tmux) running these scripts:
+   ```sh
+   wget https://raw.githubusercontent.com/LBRYFoundation/pool/next/install.sh
+   chmod +x install.sh
+   ./install.sh
+   ```
 
-	web/main.sh
-	web/loop2.sh
-	web/block.sh
-	
-This is done running the pool-start.sh script in the home folder.
+   The installer installs all dependencies (nginx, MariaDB, PHP, `lbrycrdd`), builds the
+   stratum and blocknotify, creates the database, and generates `serverconfig.php` and
+   the stratum config. It writes a log to `install.log` and saves your answers to
+   `install.conf` (which is gitignored).
 
-Now you will need to edit the coin in the admin panel, this will be http://IP/site/ADMIN_ADDRESS_USED_WHILE_INSTALLING then go to Coins on the headers, Find LBRY Credits and click LBC.
+3. Start the pool:
 
-Here you need to do the following:
-1. Edit algo to lbry
-2. Edit image to /images/coin-LBRY.png
-3. Edit Daemon information to the following:
-4. process name - lbrycrdd
-5. Conf.folder - .lbrycrd
-6. RPC Host - 127.0.0.1
-7. RPC User - This is the Username at the end of the install script. 
-8. RPC Password - This is the Password at the end of the install script.
-9. RPC Type - POW
-10. Edit Settings and tick the following boxes:
-11. Enable
-12. Auto Ready
-13. Visable
-14. Installed
-15. Click Save
+   ```sh
+   sudo bash ~/pool-start.sh
+   ```
 
-Once you have clicked save, you need to restart the lbry daemon in the VPS:
-1. lbrycrd-cli stop
-2. lbrycrdd -daemon
+   This starts these tmux sessions: `main`, `loop2`, `blocks`, `debug` and `stratum`.
+   Attach with `tmux attach -t <name>`.
 
-At the moment you will find other wallets active, you can click the install tick box on all of the ones that you are not using. I will update this at some point to remove them when installing.
+Sample configuration files are in `web/serverconfig.sample.php`, `web/keys.sample.php`
+and `stratum/config.sample/lbry.conf`.
 
-On the website, go to http://server.com/site/adminRights to login as admin. You have to change it to something different in the code (web/yaamp/modules/site/SiteController.php). A real admin login may be added later, but you can setup a password authentification with your web server, sample for lighttpd:
+## Configure the LBC coin
 
-	htpasswd -c /etc/yiimp/admin.htpasswd <adminuser>
+Open `http://<your-server>/site/<ADMIN_PANEL>` (the admin path you chose during
+install), go to **Coins**, and edit **LBRY Credits (LBC)**:
 
-and in the lighttpd config file:
+| Field | Value |
+| --- | --- |
+| Algo | `lbry` |
+| Image | `/images/coin-LBRY.png` |
+| Process name | `lbrycrdd` |
+| Conf. folder | `.lbrycrd` |
+| RPC host | `127.0.0.1` |
+| RPC user / password | The values printed at the end of the install |
+| RPC type | `POW` |
 
-	# Admin access
-	$HTTP["url"] =~ "^/site/adminRights" {
-	        auth.backend = "htpasswd"
-	        auth.backend.htpasswd.userfile = "/etc/yiimp/admin.htpasswd"
-	        auth.require = (
-	                "/" => (
-	                        "method" => "basic",
-	                        "realm" => "Yiimp Administration",
-	                        "require" => "valid-user"
-	                )
-	        )
-	}
+Then tick **Enable**, **Auto Ready**, **Visible** and **Installed**, and save.
 
-And finally remove the IP filter check in SiteController.php
+Restart the daemon so it picks up the change:
 
+```sh
+lbrycrd-cli stop
+lbrycrdd -daemon
+```
 
+Other coins from the original Yiimp database may be listed. Untick **Installed** for
+any coin you do not run.
 
-There are logs generated in the /var/stratum folder and /var/log/stratum/debug.log for the php log.
+## Admin access
 
-More instructions coming as needed.
+The admin panel is restricted by IP address and by a secret URL path (set during
+install, see `web/yaamp/modules/site/SiteController.php`). For stronger protection,
+add HTTP basic auth in front of it. Example for nginx:
 
+```sh
+sudo htpasswd -c /etc/yiimp/admin.htpasswd <adminuser>
+```
 
-Credits:
+```nginx
+location ~ ^/site/<ADMIN_PANEL> {
+    auth_basic           "Pool Administration";
+    auth_basic_user_file /etc/yiimp/admin.htpasswd;
+    # ... your usual PHP/fastcgi settings ...
+}
+```
 
-Thanks to globalzon to have released the initial Yaamp source code.
-Thanks to tpruvot for updating the source code to yiimp.
-Thanks to oakey22 for customising this for Lbry.
-Thanks to Coolguy3289 for picking this project back up and getting the software compatible with lbrycrd again.
+## Logs
 
+- Stratum: `/var/stratum/` (and `/var/stratum/config/*.log`)
+- PHP / web: `/var/log/stratum/debug.log`
+
+## Credits
+
+- globalzon, for the original Yaamp source.
+- tpruvot, for updating it to Yiimp.
+- oakey22, for customising it for LBRY.
+- Coolguy3289, for bringing it back up to date with lbrycrd.
