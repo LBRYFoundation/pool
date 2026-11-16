@@ -165,7 +165,7 @@ output ""
 output "Grabbing yiimp from Github, building files and setting file structure."
 output ""
 cd ~ || exit
-git clone https://github.com/lbryio/pool.git yiimp
+git clone https://github.com/LBRYFoundation/pool.git yiimp
 
 # 2.a: Build blocknotify
 # Generating Random Password for stratum (to be used blocknotify and stratum config further down)
