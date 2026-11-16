@@ -102,9 +102,9 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 
 	else if(client->userid == 0 && strlen(client->username) >= MIN_ADDRESS_LEN)
 	{
-		db_query(db, "INSERT INTO accounts (username, coinsymbol, balance, donation, hostaddr) values ('%s', '%s', 0, %d, '%s')",
-			client->username, symbol, gift, client->sock->ip);
-		client->userid = (int)mysql_insert_id(&db->mysql);
+		if(db_query(db, "INSERT INTO accounts (username, coinsymbol, balance, donation, hostaddr) values ('%s', '%s', 0, %d, '%s')",
+			client->username, symbol, gift, client->sock->ip))
+			client->userid = (int)mysql_insert_id(&db->mysql);
 	}
 
 	else {
@@ -155,12 +155,13 @@ void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client)
 	strncpy(version, client->version, 64);
 	strncpy(worker, client->worker, 64);
 
-	db_query(db, "INSERT INTO workers (userid, ip, name, difficulty, version, password, worker, algo, time, pid) "
+	if(db_query(db, "INSERT INTO workers (userid, ip, name, difficulty, version, password, worker, algo, time, pid) "
 		"VALUES (%d, '%s', '%s', %f, '%s', '%s', '%s', '%s', %d, %d)",
 		client->userid, client->sock->ip, client->username, client->difficulty_actual,
-		version, password, worker, g_stratum_algo, now, getpid());
-
-	client->workerid = (int)mysql_insert_id(&db->mysql);
+		version, password, worker, g_stratum_algo, now, getpid()))
+		client->workerid = (int)mysql_insert_id(&db->mysql);
+	else
+		clientlog(client, "unable to register worker in database");
 }
 
 void db_update_workers(YAAMP_DB *db)

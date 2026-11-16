@@ -130,8 +130,11 @@ int main(int argc, char **argv)
 
 	snprintf(g_stratum_algo, sizeof(g_stratum_algo), "%s", iniparser_getstring(ini, "STRATUM:algo", "lbry"));
 	char *cb_sig = iniparser_getstring(ini, "STRATUM:coinbase_sig", NULL);
-	if (cb_sig && strlen(cb_sig) > 0 && strlen(cb_sig) < 60) {
-		snprintf(g_stratum_coinbase_sig, sizeof(g_stratum_coinbase_sig), "%s", cb_sig);
+	if (cb_sig && strlen(cb_sig) > 0) {
+		// The full coinbase scriptSig (height + flags + time + extranonce + sig) must be <= 100 bytes
+		if (strlen(cb_sig) > YAAMP_COINBASE_SIG_MAX)
+			stratumlog("WARNING: coinbase_sig '%s' is longer than %d bytes, truncating\n", cb_sig, YAAMP_COINBASE_SIG_MAX);
+		snprintf(g_stratum_coinbase_sig, sizeof(g_stratum_coinbase_sig), "%.*s", YAAMP_COINBASE_SIG_MAX, cb_sig);
 	}
 	g_stratum_difficulty = iniparser_getdouble(ini, "STRATUM:difficulty", 16);
 	g_stratum_min_diff = iniparser_getdouble(ini, "STRATUM:diff_min", g_stratum_difficulty/2);
@@ -176,6 +179,9 @@ int main(int argc, char **argv)
 
 	YAAMP_DB *db = db_connect();
 	if(!db) yaamp_error("Cant connect database");
+
+	// Fail fast on schema problems before accepting any miner
+	db_check_schema(db);
 
 	db_register_stratum(db);
 	db_update_algos(db);

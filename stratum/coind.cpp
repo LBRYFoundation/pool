@@ -49,9 +49,8 @@ void coind_sort()
 	}
 }
 
-bool coind_can_mine(YAAMP_COIND *coind, bool isaux)
+bool coind_can_mine(YAAMP_COIND *coind)
 {
-	if(isaux) return false;
 	if(coind->deleted) return false;
 	if(!coind->enable) return false;
 	if(!coind->auto_ready) return false;
@@ -127,10 +126,27 @@ bool coind_validate_address(YAAMP_COIND *coind)
 	if (!base58_decode(coind->wallet, coind->script_pubkey))
 		stratumlog("Warning: unable to base58 decode %s %s script pubkey\n", coind->symbol, coind->wallet);
 
-	// Fallback or override with scriptPubKey from validateaddress if base58 decode did not produce a hash160
+	// Fallback when base58 decode did not produce a hash160 (e.g. Bech32 lbc1... pool wallet).
+	// lbcd returns witness_version/witness_program, bitcoind-style nodes return scriptPubKey,
+	// and lbcwallet may return neither.
 	if (!strlen(coind->script_pubkey)) {
 		const char *pk = json_get_string(json_result, "scriptPubKey");
-		if (pk && strlen(pk) == 50 && strncmp(pk, "76a914", 6) == 0) {
+		const char *wprog = json_get_string(json_result, "witness_program");
+		json_value *wver = json_get_val(json_result, "witness_version");
+		size_t wprog_len = wprog ? strlen(wprog) : 0;
+
+		if (wprog && wver && wver->type == json_integer && wprog_len >= 4 && wprog_len <= 80 && !(wprog_len & 1)
+			&& wver->u.integer >= 0 && wver->u.integer <= 16)
+		{
+			// Segwit scriptPubKey: OP_n <push len> <program>
+			int ver = (int)wver->u.integer;
+			unsigned int opver = ver ? (unsigned int)(0x50 + ver) : 0x00;
+			snprintf(coind->script_pubkey, sizeof(coind->script_pubkey), "%02x%02x%s",
+				opver, (unsigned int)(wprog_len >> 1), wprog);
+			coind->raw_script_pubkey = true;
+			coind->p2sh_address = false;
+			stratumlog("%s %s built witness scriptPubKey %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
+		} else if (pk && strlen(pk) == 50 && strncmp(pk, "76a914", 6) == 0) {
 			strncpy(coind->script_pubkey, pk + 6, 40);
 			coind->script_pubkey[40] = '\0';
 			stratumlog("%s %s extracted P2PKH hash160 is %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
@@ -139,7 +155,10 @@ bool coind_validate_address(YAAMP_COIND *coind)
 			coind->raw_script_pubkey = true;
 			stratumlog("%s %s extracted raw scriptPubKey is %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
 		} else {
-			stratumlog("%s wallet addr '%s' script_pubkey could not be decoded\n", coind->symbol, coind->wallet);
+			stratumlog("ERROR: %s pool wallet '%s' script_pubkey could not be determined: validateaddress "
+				"returned neither witness_version/witness_program nor scriptPubKey. "
+				"Use a Base58 (b.../r...) pool wallet address instead.\n", coind->symbol, coind->wallet);
+			isvalid = false;
 		}
 	}
 	json_value_free(json);

@@ -60,11 +60,23 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 	char script1[4*1024];
 	snprintf(script1, sizeof(script1), "%s%s%s08", eheight, templ->flags, etime);
 
-	// Encode configurable coinbase signature (default "/lbrypool.net/") into hex
+	// Encode configurable coinbase signature (default "/lbrypool.net/") into hex.
+	// Consensus: total coinbase scriptSig must be <= 100 bytes.
 	char script2[256] = { 0 };
 	const char *sig = strlen(g_stratum_coinbase_sig) ? g_stratum_coinbase_sig : "/lbrypool.net/";
 	size_t sig_len = strlen(sig);
-	if (sig_len > 100) sig_len = 100;
+	int sig_room = 100 - (int)(strlen(script1)/2) - 8;
+	size_t sig_max = sig_room > 0 ? (size_t)sig_room : 0;
+	if (sig_max > YAAMP_COINBASE_SIG_MAX) sig_max = YAAMP_COINBASE_SIG_MAX;
+	if (sig_len > sig_max) {
+		static bool warned = false;
+		if (!warned) {
+			stratumlog("WARNING: coinbase signature truncated from %d to %d bytes to keep scriptSig <= 100 bytes\n",
+				(int)sig_len, (int)sig_max);
+			warned = true;
+		}
+		sig_len = sig_max;
+	}
 	hexlify(script2, (const unsigned char *)sig, (int)sig_len);
 
 	int script_len = (int)(strlen(script1)/2 + strlen(script2)/2 + 8);
