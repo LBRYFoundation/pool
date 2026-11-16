@@ -3,19 +3,19 @@
  * CRedisCache class file
  *
  * @author Carsten Brandt <mail@cebe.cc>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  */
 
 /**
- * CRedisCache implements a cache application component based on {@link http://redis.io/ redis}.
+ * CRedisCache implements a cache application component based on {@link https://redis.io/ redis}.
  *
  * CRedisCache needs to be configured with {@link hostname}, {@link port} and {@link database} of the server
  * to connect to. By default CRedisCache assumes there is a redis server running on localhost at
- * port 6379 and uses the database number 0.
+ * port 6379 and uses the database number 0. It also supports redis server using {@link unixSocket}.
  *
- * CRedisCache also supports {@link http://redis.io/commands/auth the AUTH command} of redis.
+ * CRedisCache also supports {@link https://redis.io/commands/auth the AUTH command} of redis.
  * When the server needs authentication, you can set the {@link password} property to
  * authenticate with the server after connect.
  *
@@ -31,6 +31,19 @@
  *             'port'=>6379,
  *             'database'=>0,
  *             'options'=>STREAM_CLIENT_CONNECT,
+ *             'username' => 'default' // only for REDIS version 6.0 or later
+ *         ),
+ *     ),
+ * )
+ * </pre>
+ * 
+ * To use CRedisCache with a unix socket, configure the application as follows,
+ * <pre>
+ * array(
+ *     'components'=>array(
+ *         'cache'=>array(
+ *             'class'=>'CRedisCache',
+ *             'unixSocket'=>'/var/run/redis/redis.sock',
  *         ),
  *     ),
  * )
@@ -46,12 +59,18 @@ class CRedisCache extends CCache
 {
 	/**
 	 * @var string hostname to use for connecting to the redis server. Defaults to 'localhost'.
+	 * If [[unixSocket]] is specified, this property and [[port]] will be ignored.
 	 */
 	public $hostname='localhost';
 	/**
 	 * @var int the port to use for connecting to the redis server. Default port is 6379.
+	 * If [[unixSocket]] is specified, this property and [[hostname]] will be ignored.
 	 */
 	public $port=6379;
+	/**
+	 * @var string the username to use to authenticate with the redis server. If set, AUTH command will be sent with username.
+	 */
+	public $username;
 	/**
 	 * @var string the password to use to authenticate with the redis server. If not set, no AUTH command will be sent.
 	 */
@@ -62,7 +81,7 @@ class CRedisCache extends CCache
 	public $database=0;
 	/**
 	 * @var int the options to pass to the flags parameter of stream_socket_client when connecting to the redis server. Defaults to STREAM_CLIENT_CONNECT.
-	 * @see http://php.net/manual/en/function.stream-socket-client.php
+	 * @see https://php.net/manual/en/function.stream-socket-client.php
 	 */
 	public $options=STREAM_CLIENT_CONNECT;
 	/**
@@ -70,9 +89,17 @@ class CRedisCache extends CCache
 	 */
 	public $timeout=null;
 	/**
+	* @var boolean Send sockets over SSL protocol. Default state is false.
+	*/
+	public $ssl=false;
+	/**
 	 * @var resource redis socket connection
 	 */
 	private $_socket;
+	/**
+	 * @var string unix socket path (e.g. `/var/run/redis/redis.sock`) to use for connecting to the redis server. If set, [[hostname]] and [[port]] will be ignored.
+	 */
+	public $unixSocket;
 
 	/**
 	 * Establishes a connection to the redis server.
@@ -81,8 +108,10 @@ class CRedisCache extends CCache
 	 */
 	protected function connect()
 	{
+		$address = $this->unixSocket ? 'unix://'.$this->unixSocket : $this->hostname.':'.$this->port;
+
 		$this->_socket=@stream_socket_client(
-			$this->hostname.':'.$this->port,
+			$address,
 			$errorNumber,
 			$errorDescription,
 			$this->timeout ? $this->timeout : ini_get("default_socket_timeout"),
@@ -90,8 +119,16 @@ class CRedisCache extends CCache
 		);
 		if ($this->_socket)
 		{
-			if($this->password!==null)
-				$this->executeCommand('AUTH',array($this->password));
+			if($this->ssl)
+				stream_socket_enable_crypto($this->_socket,true,STREAM_CRYPTO_METHOD_TLS_CLIENT);
+			if ($this->password !== null) {
+				if ($this->username !== null) {
+					$this->executeCommand('AUTH',array($this->username, $this->password));
+				} else {
+					$this->executeCommand('AUTH',array($this->password));
+				}
+			}
+				
 			$this->executeCommand('SELECT',array($this->database));
 		}
 		else
@@ -103,7 +140,7 @@ class CRedisCache extends CCache
 
 	/**
 	 * Executes a redis command.
-	 * For a list of available commands and their parameters see {@link http://redis.io/commands}.
+	 * For a list of available commands and their parameters see {@link https://redis.io/commands}.
 	 *
 	 * @param string $name the name of the command
 	 * @param array $params list of parameters for the command
@@ -116,9 +153,9 @@ class CRedisCache extends CCache
 	 *   <li><code>string</code> or <code>null</code> for commands that return "bulk reply".</li>
 	 *   <li><code>array</code> for commands that return "Multi-bulk replies".</li>
 	 * </ul>
-	 * See {@link http://redis.io/topics/protocol redis protocol description}
+	 * See {@link https://redis.io/topics/protocol redis protocol description}
 	 * for details on the mentioned reply types.
-	 * @throws CException for commands that return {@link http://redis.io/topics/protocol#error-reply error reply}.
+	 * @throws CException for commands that return {@link https://redis.io/topics/protocol#error-reply error reply}.
 	 */
 	public function executeCommand($name,$params=array())
 	{
@@ -198,7 +235,10 @@ class CRedisCache extends CCache
 	 */
 	protected function getValue($key)
 	{
-		return $this->executeCommand('GET',array($key));
+		$value=$this->executeCommand('GET',array($key));
+		if ($value===null)
+			return false;
+		return $value;
 	}
 
 	/**

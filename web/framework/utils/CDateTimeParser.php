@@ -5,9 +5,9 @@
  * @author Wei Zhuo <weizhuo[at]gamil[dot]com>
  * @author Qiang Xue <qiang.xue@gmail.com>
  * @author Tomasz Suchanek <tomasz[dot]suchanek[at]gmail[dot]com>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  */
 
 /**
@@ -210,7 +210,7 @@ class CDateTimeParser
 				default:
 				{
 					$tn=self::$_mbstringAvailable ? mb_strlen($token,Yii::app()->charset) : strlen($token);
-					if($i>=$n || ($token{0}!='?' && (self::$_mbstringAvailable ? mb_substr($value,$i,$tn,Yii::app()->charset) : substr($value,$i,$tn))!==$token))
+					if($i>=$n || ($token[0]!='?' && (self::$_mbstringAvailable ? mb_substr($value,$i,$tn,Yii::app()->charset) : substr($value,$i,$tn))!==$token))
 						return false;
 					$i+=$tn;
 					break;

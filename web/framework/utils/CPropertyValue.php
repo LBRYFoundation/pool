@@ -3,9 +3,9 @@
  * CPropertyValue class file.
  *
  * @author Qiang Xue <qiang.xue@gmail.com>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  */
 
 /**
@@ -53,7 +53,7 @@ class CPropertyValue
 	public static function ensureBoolean($value)
 	{
 		if (is_string($value))
-			return !strcasecmp($value,'true') || $value!=0;
+			return !strcasecmp($value,'true') || ($value!=0 && $value!=='' && is_numeric($value));
 		else
 			return (boolean)$value;
 	}
