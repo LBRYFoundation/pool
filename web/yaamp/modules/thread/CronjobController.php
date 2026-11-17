@@ -35,7 +35,7 @@ class CronjobController extends CommonController
 		else if(!$webserver_running)
 		{
 			debuglog('starting webserver');
-			system("service $webserver start");
+			system(posix_geteuid() === 0 ? "service $webserver start" : "sudo -n service $webserver start");
 		}
 	}
 
@@ -200,7 +200,7 @@ class CronjobController extends CommonController
 
 		memcache_set($this->memcache->memcache, 'apache_locked', true);
 		if(YAAMP_USE_NGINX)
-			system("service nginx stop");
+			system(posix_geteuid() === 0 ? "service nginx stop" : "sudo -n service nginx stop");
 
 		sleep(10);
 		BackendDoBackup();

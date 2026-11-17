@@ -56,7 +56,8 @@ start() {
 }
 
 lbcd_ready() {
-  lbcctl -C "${POOL_ETC}/lbcctl.conf" -s "${LBCD_RPC}" getblockcount >/dev/null 2>&1
+  lbcctl -C "${POOL_ETC}/lbcctl.conf" -s "${LBCD_RPC}" getblockcount >/dev/null 2>&1 ||
+    lbcctl -C "${POOL_ETC}/lbcctl.conf" --notls -s "${LBCD_RPC}" getblockcount >/dev/null 2>&1
 }
 
 lbcwallet_ready() {
@@ -75,6 +76,12 @@ wait_lbcd() {
 }
 
 unlock_wallet() {
+  # Only unlock if walletislocked reports true; calling walletpassphrase on a wallet
+  # already unlocked at startup (via passphrase= in lbcwallet.conf) overrides the
+  # indefinite startup unlock with a temporary timeout.
+  local locked
+  locked="$(lbcctl -C "${POOL_ETC}/lbcctl.conf" --notls --wallet -s "${LBCWALLET_RPC}" walletislocked 2>/dev/null || true)"
+  [[ "${locked}" == "true" ]] || return 0
   if [[ -f "${POOL_ETC}/blocknotify.env" ]]; then
     local wpass
     wpass="$(awk -F '=' '$1=="LBC_WALLET_PASS"{print substr($0, index($0,"=")+1); exit}' "${POOL_ETC}/blocknotify.env" 2>/dev/null || true)"
@@ -133,6 +140,10 @@ start_blocknotify() {
 }
 
 start_web() {
+  install -d -o www-data -g www-data -m 2775 "${YIIMP_LOG_DIR}"
+  touch "${YIIMP_LOG_DIR}/debug.log"
+  chown -R www-data:www-data "${YIIMP_LOG_DIR}" "${WEB_DIR}/yaamp/runtime" "${WEB_DIR}/assets" 2>/dev/null || true
+  chmod 0664 "${YIIMP_LOG_DIR}"/*.log 2>/dev/null || true
   local job
   for job in main loop2 blocks; do
     start "${job}" "cd ${WEB_DIR} && runuser -u www-data -- bash ${WEB_DIR}/${job}.sh"
@@ -140,7 +151,11 @@ start_web() {
 }
 
 start_debug() {
-  start debug "touch ${YIIMP_LOG_DIR}/debug.log && tail -F ${YIIMP_LOG_DIR}/debug.log"
+  install -d -o www-data -g www-data -m 2775 "${YIIMP_LOG_DIR}"
+  touch "${YIIMP_LOG_DIR}/debug.log"
+  chown www-data:www-data "${YIIMP_LOG_DIR}/debug.log" 2>/dev/null || true
+  chmod 0664 "${YIIMP_LOG_DIR}/debug.log" 2>/dev/null || true
+  start debug "tail -F ${YIIMP_LOG_DIR}/debug.log"
 }
 
 [[ $# -gt 0 ]] || set -- all

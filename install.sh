@@ -65,15 +65,25 @@ backup_file() {
 }
 
 ################################################################################
-# Read a key=value option from an INI/conf file (ignores comments and section headers)
+# Read a key=value option from an INI/conf file (ignores comments and section headers;
+# strips inline comments and recognizes bare boolean flags like `notls`)
 ini_value() {
   sudo awk -F '=' -v k="$2" '
     /^[ \t]*[#;\[]/ { next }
     {
-      key = $1; gsub(/^[ \t]+|[ \t\r]+$/, "", key)
+      line = $0
+      sub(/[ \t]+[#;].*$/, "", line)
+      pos = index(line, "=")
+      if (pos > 0) {
+        key = substr(line, 1, pos - 1)
+        val = substr(line, pos + 1)
+      } else {
+        key = line
+        val = "true"
+      }
+      gsub(/^[ \t]+|[ \t\r]+$/, "", key)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", val)
       if (key == k) {
-        val = substr($0, index($0, "=") + 1)
-        gsub(/^[ \t]+|[ \t\r]+$/, "", val)
         print val
         exit
       }
@@ -419,12 +429,18 @@ for cand in "${LBCD_CANDIDATES[@]}"; do
         LBCD_RPC="${cand_listen}"
       fi
       cand_notls="$(ini_value "${cand}" notls)"
-      if [[ "${cand_notls,,}" =~ ^(1|true|yes)$ ]]; then
+      if [[ "${cand_notls,,}" =~ ^(1|true|yes)$ ]] ||
+         ps -eo args | grep -E '[l]bcd([[:space:]]|$)' | grep -q -- '--notls' ||
+         ps -eo args | grep -E '[l]bcwallet([[:space:]]|$)' | grep -q -- '--noclienttls'; then
         LBCD_NOTLS=1
       else
         cand_cert="$(ini_value "${cand}" rpccert)"
         [[ -z "${cand_cert}" ]] && cand_cert="$(dirname "${cand}")/rpc.cert"
-        if sudo test -f "${cand_cert}"; then
+        # Probe whether lbcd RPC is actually plain HTTP before assuming TLS from a leftover rpc.cert
+        http_code="$(curl -s -k -m 2 -o /dev/null -w '%{http_code}' "http://${LBCD_RPC}/" 2>/dev/null || true)"
+        if [[ "${http_code}" == "401" || "${http_code}" == "200" || "${http_code}" == "405" ]]; then
+          LBCD_NOTLS=1
+        elif sudo test -f "${cand_cert}"; then
           LBCD_NOTLS=0
           LBCD_CERT="${cand_cert}"
         fi
@@ -478,6 +494,8 @@ for cand in "${LBCWALLET_CANDIDATES[@]}"; do
       [[ "${cand_wlisten}" != *:* ]] && cand_wlisten="127.0.0.1:${cand_wlisten}"
       LBCWALLET_RPC="${cand_wlisten}"
     fi
+    cand_noclienttls="$(ini_value "${cand}" noclienttls)"
+    [[ "${cand_noclienttls,,}" =~ ^(1|true|yes)$ ]] && LBCD_NOTLS=1
     break
   fi
 done
@@ -848,8 +866,9 @@ for _ in $(seq 1 5); do
 done
 
 if [[ "${WALLET_RPC_READY}" == 1 ]]; then
-  # Ensure the wallet is unlocked (in case lbcwallet was already running locked)
-  if [[ -n "${SECRETS[LBC_WALLET_PASS]:-}" ]]; then
+  # Only unlock if walletislocked reports true (calling walletpassphrase on an already-unlocked
+  # wallet overrides lbcwallet's indefinite startup unlock with a temporary timeout)
+  if [[ -n "${SECRETS[LBC_WALLET_PASS]:-}" ]] && [[ "$(lbcctl_wallet walletislocked 2>/dev/null || true)" == "true" ]]; then
     lbcctl_wallet walletpassphrase "${SECRETS[LBC_WALLET_PASS]}" 315360000 >/dev/null 2>&1 || true
   fi
   if [[ -n "${MASTER_WALLET}" ]]; then
@@ -954,7 +973,12 @@ sudo sed -i "s/AdminRights/${CONFMAP['ADMIN_PANEL']}/" "${WEB_DIR}/yaamp/modules
 sudo install -d /var/yiimp
 sudo ln -sfn "${WEB_DIR}" /var/yiimp/web
 
-sudo install -d -o www-data -g www-data -m 0750 "${YIIMP_LOG_DIR}" "${BACKUP_DIR}"
+sudo install -d -o www-data -g www-data -m 2775 "${YIIMP_LOG_DIR}" "${BACKUP_DIR}"
+sudo touch "${YIIMP_LOG_DIR}/debug.log" "${YIIMP_LOG_DIR}/rental.log"
+sudo chown -R www-data:www-data "${YIIMP_LOG_DIR}" "${BACKUP_DIR}"
+sudo chmod 0664 "${YIIMP_LOG_DIR}"/*.log 2>/dev/null || true
+sudo chown -R www-data:www-data "${WEB_DIR}/yaamp/runtime" "${WEB_DIR}/assets"
+sudo chmod -R 2775 "${WEB_DIR}/yaamp/runtime" "${WEB_DIR}/assets"
 
 # Operator settings (as PHP literals); values from an existing serverconfig.php win
 declare -A WEBCFG=(
@@ -1060,6 +1084,13 @@ sudo chown root:www-data /etc/yiimp/keys.php
 sudo chmod 0640 /etc/yiimp/keys.php
 sudo usermod -aG www-data "$(whoami)"
 
+# Allow www-data (used by the main/loop2/blocks backend processes) to stop/start
+# nginx non-interactively during payouts and monitorApache() without prompting for a password.
+sudo tee /etc/sudoers.d/lbcpool-nginx >/dev/null <<'EOF'
+www-data ALL=(root) NOPASSWD: /usr/sbin/service nginx start, /usr/sbin/service nginx stop, /usr/sbin/service nginx reload, /usr/sbin/service nginx restart, /bin/systemctl start nginx, /bin/systemctl stop nginx, /bin/systemctl reload nginx, /bin/systemctl restart nginx
+EOF
+sudo chmod 0440 /etc/sudoers.d/lbcpool-nginx
+
 # 7.b: Nginx
 # shellcheck disable=SC2016
 echo 'map $http_user_agent $blockedagent {
@@ -1072,15 +1103,29 @@ default         0;
 }
 ' | sudo tee /etc/nginx/blockuseragents.rules >/dev/null
 
-# write_nginx_site <0|1>: 1 = HTTPS site with HTTP->HTTPS redirect
+# Find an existing Let's Encrypt live certificate directory for SERVER_NAME
+# (handles /etc/letsencrypt/live/<domain>-0001 and mode 0700 /etc/letsencrypt/live)
+find_letsencrypt_cert_dir() {
+  local d
+  while IFS= read -r d; do
+    [[ -n "${d}" ]] || continue
+    if sudo test -f "${d}/fullchain.pem" && sudo test -f "${d}/privkey.pem"; then
+      echo "${d}"
+      return 0
+    fi
+  done < <(sudo find /etc/letsencrypt/live -mindepth 1 -maxdepth 1 \( -name "${SERVER_NAME}" -o -name "${SERVER_NAME}-*" \) 2>/dev/null | sort -V)
+  return 1
+}
+
+# write_nginx_site <0|1> [cert_dir]: 1 = HTTPS site with HTTP->HTTPS redirect
 write_nginx_site() {
-  local ssl="$1" listen tls=""
+  local ssl="$1" cert_dir="${2:-/etc/letsencrypt/live/${SERVER_NAME}}" listen tls=""
   if [[ "${ssl}" == 1 ]]; then
     listen='    listen 443 ssl http2;
     listen [::]:443 ssl http2;'
     tls="
-    ssl_certificate /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+    ssl_certificate ${cert_dir}/fullchain.pem;
+    ssl_certificate_key ${cert_dir}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
     ssl_session_cache shared:SSL:10m;
@@ -1163,21 +1208,38 @@ EOF
 
 backup_file "/etc/nginx/sites-available/${SERVER_NAME}.conf"
 sudo rm -f /etc/nginx/sites-enabled/default
+# Remove any stale sites-enabled configs that conflict on server_name
+for enabled_site in /etc/nginx/sites-enabled/*; do
+  [[ -e "${enabled_site}" ]] || continue
+  [[ "$(basename "${enabled_site}")" == "${SERVER_NAME}.conf" ]] && continue
+  if sudo grep -qF "${SERVER_NAME}" "${enabled_site}" 2>/dev/null; then
+    sudo rm -f "${enabled_site}"
+  fi
+done
 sudo systemctl enable --now nginx
-if [[ -f "/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem" ]]; then
-  write_nginx_site 1
+LE_CERT_DIR="$(find_letsencrypt_cert_dir || true)"
+if [[ -n "${LE_CERT_DIR}" ]]; then
+  output "Using existing Let's Encrypt certificate in ${LE_CERT_DIR}"
+  write_nginx_site 1 "${LE_CERT_DIR}"
 else
   write_nginx_site 0
   if is_yes_default "${CONFMAP['SSL_INSTALL']}"; then
     output "Install LetsEncrypt and setting SSL"
     sudo -E apt-get install -y certbot python3-certbot-nginx
-    CERTBOT_DOMAINS=()
-    for name in ${SERVER_NAMES}; do CERTBOT_DOMAINS+=(-d "${name}"); done
     CERTBOT_EMAIL=(--register-unsafely-without-email)
     [[ -n "${CONFMAP['EMAIL']}" ]] && CERTBOT_EMAIL=(-m "${CONFMAP['EMAIL']}")
-    if sudo certbot certonly --webroot -w "${WEB_DIR}" --non-interactive --agree-tos "${CERTBOT_EMAIL[@]}" \
-      --deploy-hook "systemctl reload nginx" "${CERTBOT_DOMAINS[@]}"; then
-      write_nginx_site 1
+    # Request certificate for SERVER_NAME (and www.SERVER_NAME if it resolves; fall back to SERVER_NAME alone if www DNS is missing)
+    CERTBOT_DOMAINS=(-d "${SERVER_NAME}")
+    for name in ${SERVER_NAMES}; do
+      [[ "${name}" == "${SERVER_NAME}" ]] && continue
+      CERTBOT_DOMAINS+=(-d "${name}")
+    done
+    if sudo certbot certonly --webroot -w "${WEB_DIR}" --non-interactive --agree-tos --keep-until-expiring "${CERTBOT_EMAIL[@]}" \
+      --deploy-hook "systemctl reload nginx" "${CERTBOT_DOMAINS[@]}" ||
+       { [[ "${#CERTBOT_DOMAINS[@]}" -gt 2 ]] && sudo certbot certonly --webroot -w "${WEB_DIR}" --non-interactive --agree-tos --keep-until-expiring "${CERTBOT_EMAIL[@]}" \
+         --deploy-hook "systemctl reload nginx" -d "${SERVER_NAME}"; }; then
+      LE_CERT_DIR="$(find_letsencrypt_cert_dir || echo "/etc/letsencrypt/live/${SERVER_NAME}")"
+      write_nginx_site 1 "${LE_CERT_DIR}"
     else
       output "WARNING: certbot failed, the site stays on plain HTTP. Re-run the installer once DNS points here."
     fi
