@@ -28,9 +28,15 @@ STRATUM_DIR=/var/stratum
 WEB_DIR=/var/web
 YIIMP_LOG_DIR=/var/log/yiimp
 LBCD_RPC=127.0.0.1:9245
+LBCWALLET_RPC=127.0.0.1:9244
+LBCD_CONF="${LBC_HOME}/.lbcd/lbcd.conf"
+LBCWALLET_CONF="${LBC_HOME}/.lbcwallet/lbcwallet.conf"
+LBCWALLET_APPDATA="${LBC_HOME}/.lbcwallet"
+LBCD_NOTLS=1
+LBCD_CERT=""
 STRATUM_PORT=3334
 
-# COIN_ID (written by install.sh)
+# COIN_ID and discovered paths/ports (written by install.sh)
 # shellcheck source=/dev/null
 . "${POOL_ETC}/pool.env"
 
@@ -53,6 +59,10 @@ lbcd_ready() {
   lbcctl -C "${POOL_ETC}/lbcctl.conf" -s "${LBCD_RPC}" getblockcount >/dev/null 2>&1
 }
 
+lbcwallet_ready() {
+  lbcctl -C "${POOL_ETC}/lbcctl.conf" --notls --wallet -s "${LBCWALLET_RPC}" getinfo >/dev/null 2>&1
+}
+
 wait_lbcd() {
   local i
   for i in $(seq 1 120); do
@@ -65,12 +75,24 @@ wait_lbcd() {
 }
 
 start_lbcd() {
-  start lbcd "ulimit -n 65536 && runuser -u lbc -- /usr/local/bin/lbcd --configfile=${LBC_HOME}/.lbcd/lbcd.conf"
+  if lbcd_ready || pgrep -x lbcd >/dev/null; then
+    echo "lbcd: already running on host"
+    return
+  fi
+  local owner
+  owner="$(stat -c '%U' "${LBCD_CONF}" 2>/dev/null || echo lbc)"
+  start lbcd "ulimit -n 65536 && runuser -u ${owner} -- /usr/local/bin/lbcd --configfile=${LBCD_CONF}"
 }
 
 start_lbcwallet() {
   wait_lbcd || true
-  start lbcwallet "runuser -u lbc -- /usr/local/bin/lbcwallet --configfile=${LBC_HOME}/.lbcwallet/lbcwallet.conf --appdata=${LBC_HOME}/.lbcwallet"
+  if lbcwallet_ready || pgrep -x lbcwallet >/dev/null; then
+    echo "lbcwallet: already running on host"
+    return
+  fi
+  local owner
+  owner="$(stat -c '%U' "${LBCWALLET_APPDATA}" 2>/dev/null || echo lbc)"
+  start lbcwallet "runuser -u ${owner} -- /usr/local/bin/lbcwallet --configfile=${LBCWALLET_CONF} --appdata=${LBCWALLET_APPDATA}"
 }
 
 start_stratum() {
@@ -83,8 +105,12 @@ start_blocknotify() {
     echo "blocknotify: not started (lbcd not ready); run: sudo ~/pool-start.sh blocknotify"
     return
   fi
+  local tls_flag="-notls"
+  if [[ "${LBCD_NOTLS}" == 0 && -n "${LBCD_CERT}" ]]; then
+    tls_flag="-cert ${LBCD_CERT}"
+  fi
   # credentials are read from the env file inside the session, not passed on the command line
-  start blocknotify "set -a && . ${POOL_ETC}/blocknotify.env && set +a && runuser -u lbc -- /usr/local/bin/blocknotify-dcr -notls -host ${LBCD_RPC} -stratum 127.0.0.1:${STRATUM_PORT} -coinid ${COIN_ID} -bin /usr/local/bin/blocknotify"
+  start blocknotify "set -a && . ${POOL_ETC}/blocknotify.env && set +a && runuser -u lbc -- /usr/local/bin/blocknotify-dcr ${tls_flag} -host ${LBCD_RPC} -stratum 127.0.0.1:${STRATUM_PORT} -coinid ${COIN_ID} -bin /usr/local/bin/blocknotify"
 }
 
 start_web() {

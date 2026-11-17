@@ -60,6 +60,22 @@ backup_file() {
 }
 
 ################################################################################
+# Read a key=value option from an INI/conf file (ignores comments and section headers)
+ini_value() {
+  sudo awk -F '=' -v k="$2" '
+    /^[ \t]*[#;\[]/ { next }
+    {
+      key = $1; gsub(/^[ \t]+|[ \t\r]+$/, "", key)
+      if (key == k) {
+        val = substr($0, index($0, "=") + 1)
+        gsub(/^[ \t]+|[ \t\r]+$/, "", val)
+        print val
+        exit
+      }
+    }
+  ' "$1" 2>/dev/null || true
+}
+
 # Constants
 ################################################################################
 
@@ -221,6 +237,8 @@ if [[ -f "${SECRETS_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${SECRETS_FILE}"
 fi
+# Always let an existing external lbcd/lbcwallet config win over stale cached RPC credentials
+unset "SECRETS[LBC_RPCUSER]" "SECRETS[LBC_RPCPASS]"
 
 # Phase 1: Install dependencies ################################################
 clear
@@ -332,8 +350,148 @@ if [[ -n "${CONFMAP['EMAIL']}" ]]; then
   fi
 fi
 
-# Phase 2: Secrets #############################################################
+# Phase 2: Secrets & Existing lbcd/lbcwallet Config Discovery ##################
 gen_secret() { pwgen -s 32 1; }
+
+# Discover existing lbcd / lbcwallet / lbrycrd configs and credentials on the host
+# so upgrades reuse the active daemon's RPC credentials, TLS settings, and data dir.
+EXISTING_LBCD_CONF=""
+LBCD_CONF_PATH="${LBCD_DIR}/lbcd.conf"
+LBCD_NOTLS=1
+LBCD_CERT=""
+LBCD_CANDIDATES=(
+  "/etc/lbcd/lbcd.conf"
+  "${HOME}/.lbcd/lbcd.conf"
+  "/root/.lbcd/lbcd.conf"
+)
+if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+  SUDO_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6 || true)"
+  [[ -n "${SUDO_HOME}" ]] && LBCD_CANDIDATES+=("${SUDO_HOME}/.lbcd/lbcd.conf")
+fi
+for d in /home/*/.lbcd/lbcd.conf "${LBCD_DIR}/lbcd.conf"; do
+  [[ -e "$d" ]] && LBCD_CANDIDATES+=("$d")
+done
+# If lbcd is currently running with an explicit -C / --configfile=, prefer that first
+RUNNING_LBCD_CONF="$(ps -eo args | grep -E '[l]bcd([[:space:]]|$)' | sed -nE 's/.*(-C|--configfile(=|[[:space:]]+))([^[:space:]]+).*/\3/p' | head -1 || true)"
+[[ -n "${RUNNING_LBCD_CONF}" ]] && LBCD_CANDIDATES=("${RUNNING_LBCD_CONF}" "${LBCD_CANDIDATES[@]}")
+
+for cand in "${LBCD_CANDIDATES[@]}"; do
+  if [[ -n "${cand}" ]] && sudo test -f "${cand}"; then
+    cand_user="$(ini_value "${cand}" rpcuser)"
+    cand_pass="$(ini_value "${cand}" rpcpass)"
+    if [[ -n "${cand_user}" && -n "${cand_pass}" ]]; then
+      EXISTING_LBCD_CONF="${cand}"
+      LBCD_CONF_PATH="${cand}"
+      output "Found existing lbcd config at ${EXISTING_LBCD_CONF}; reusing its RPC credentials."
+      SECRETS[LBC_RPCUSER]="${cand_user}"
+      SECRETS[LBC_RPCPASS]="${cand_pass}"
+      cand_listen="$(ini_value "${cand}" rpclisten)"
+      if [[ -n "${cand_listen}" ]]; then
+        [[ "${cand_listen}" == :* ]] && cand_listen="127.0.0.1${cand_listen}"
+        [[ "${cand_listen}" != *:* ]] && cand_listen="127.0.0.1:${cand_listen}"
+        LBCD_RPC="${cand_listen}"
+      fi
+      cand_notls="$(ini_value "${cand}" notls)"
+      if [[ "${cand_notls,,}" =~ ^(1|true|yes)$ ]]; then
+        LBCD_NOTLS=1
+      else
+        cand_cert="$(ini_value "${cand}" rpccert)"
+        [[ -z "${cand_cert}" ]] && cand_cert="$(dirname "${cand}")/rpc.cert"
+        if sudo test -f "${cand_cert}"; then
+          LBCD_NOTLS=0
+          LBCD_CERT="${cand_cert}"
+        fi
+      fi
+      break
+    fi
+  fi
+done
+
+# Discover existing lbcwallet config (passphrase, listen port, credentials, appdata)
+EXISTING_LBCWALLET_CONF=""
+LBCWALLET_CONF_PATH="${LBCWALLET_DIR}/lbcwallet.conf"
+LBCWALLET_APPDATA="${LBCWALLET_DIR}"
+LBCWALLET_CANDIDATES=(
+  "/etc/lbcwallet/lbcwallet.conf"
+  "/etc/lbcd/lbcwallet.conf"
+  "${HOME}/.lbcwallet/lbcwallet.conf"
+  "/root/.lbcwallet/lbcwallet.conf"
+  "${LBCWALLET_DIR}/lbcwallet.conf"
+)
+[[ -n "${SUDO_HOME:-}" ]] && LBCWALLET_CANDIDATES+=("${SUDO_HOME}/.lbcwallet/lbcwallet.conf")
+for d in /home/*/.lbcwallet/lbcwallet.conf; do
+  [[ -e "$d" ]] && LBCWALLET_CANDIDATES+=("$d")
+done
+RUNNING_WALLET_CONF="$(ps -eo args | grep -E '[l]bcwallet([[:space:]]|$)' | sed -nE 's/.*(-C|--configfile(=|[[:space:]]+))([^[:space:]]+).*/\3/p' | head -1 || true)"
+[[ -n "${RUNNING_WALLET_CONF}" ]] && LBCWALLET_CANDIDATES=("${RUNNING_WALLET_CONF}" "${LBCWALLET_CANDIDATES[@]}")
+
+for cand in "${LBCWALLET_CANDIDATES[@]}"; do
+  if [[ -n "${cand}" ]] && sudo test -f "${cand}"; then
+    EXISTING_LBCWALLET_CONF="${cand}"
+    LBCWALLET_CONF_PATH="${cand}"
+    cand_appdata="$(ini_value "${cand}" appdata)"
+    [[ -z "${cand_appdata}" ]] && cand_appdata="$(dirname "${cand}")"
+    if [[ -n "$(sudo find "${cand_appdata}" -name wallet.db -print -quit 2>/dev/null)" ]]; then
+      LBCWALLET_APPDATA="${cand_appdata}"
+    fi
+    cand_wpass="$(ini_value "${cand}" passphrase)"
+    [[ -n "${cand_wpass}" ]] && SECRETS[LBC_WALLET_PASS]="${cand_wpass}"
+    if [[ -z "${EXISTING_LBCD_CONF}" ]]; then
+      cand_user="$(ini_value "${cand}" rpcuser)"
+      cand_pass="$(ini_value "${cand}" rpcpass)"
+      if [[ -n "${cand_user}" && -n "${cand_pass}" ]]; then
+        output "Found existing lbcwallet config at ${EXISTING_LBCWALLET_CONF}; reusing its RPC credentials."
+        SECRETS[LBC_RPCUSER]="${cand_user}"
+        SECRETS[LBC_RPCPASS]="${cand_pass}"
+      fi
+    fi
+    cand_wlisten="$(ini_value "${cand}" rpclisten)"
+    if [[ -n "${cand_wlisten}" ]]; then
+      [[ "${cand_wlisten}" == :* ]] && cand_wlisten="127.0.0.1${cand_wlisten}"
+      [[ "${cand_wlisten}" != *:* ]] && cand_wlisten="127.0.0.1:${cand_wlisten}"
+      LBCWALLET_RPC="${cand_wlisten}"
+    fi
+    break
+  fi
+done
+
+# Fallback to legacy lbrycrd.conf or DB coins row if no lbcd/lbcwallet config had credentials yet
+if [[ -z "${SECRETS[LBC_RPCUSER]:-}" || -z "${SECRETS[LBC_RPCPASS]:-}" ]]; then
+  for cand in "${HOME}/.lbrycrd/lbrycrd.conf" "/root/.lbrycrd/lbrycrd.conf" ${SUDO_HOME:+"${SUDO_HOME}/.lbrycrd/lbrycrd.conf"} /home/*/.lbrycrd/lbrycrd.conf; do
+    if [[ -n "${cand}" ]] && sudo test -f "${cand}"; then
+      cand_user="$(ini_value "${cand}" rpcuser)"
+      cand_pass="$(ini_value "${cand}" rpcpassword)"
+      if [[ -n "${cand_user}" && -n "${cand_pass}" ]]; then
+        output "Reusing RPC credentials from legacy ${cand}"
+        SECRETS[LBC_RPCUSER]="${cand_user}"
+        SECRETS[LBC_RPCPASS]="${cand_pass}"
+        break
+      fi
+    fi
+  done
+fi
+if [[ -z "${SECRETS[LBC_RPCUSER]:-}" || -z "${SECRETS[LBC_RPCPASS]:-}" ]] && command -v mysql &>/dev/null; then
+  DB_CREDS="$(mysql_root -N -e "SELECT IFNULL(rpcuser,''), IFNULL(rpcpasswd,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
+  if [[ -n "${DB_CREDS}" ]]; then
+    read -r db_u db_p <<<"${DB_CREDS}"
+    if [[ -n "${db_u}" && -n "${db_p}" ]]; then
+      output "Reusing LBC RPC credentials from database ${DB_NAME}.coins"
+      SECRETS[LBC_RPCUSER]="${db_u}"
+      SECRETS[LBC_RPCPASS]="${db_p}"
+    fi
+  fi
+fi
+
+# Also reuse existing stratum / DB passwords on upgrade if present
+if [[ -z "${SECRETS[STRATUM_PASSWORD]:-}" ]] && sudo test -f "${STRATUM_DIR}/config/lbry.conf"; then
+  old_sp="$(sudo awk -F '=' '/^\[TCP\]/{f=1;next} /^\[/{f=0} f && $1 ~ /^[ \t]*password[ \t]*$/ {gsub(/^[ \t]+|[ \t\r]+$/,"",$2); print $2; exit}' "${STRATUM_DIR}/config/lbry.conf" 2>/dev/null || true)"
+  [[ -n "${old_sp}" && "${old_sp}" != "tu8tu5" ]] && SECRETS[STRATUM_PASSWORD]="${old_sp}"
+fi
+if [[ -z "${SECRETS[MYSQL_STRATUMPASSWD]:-}" ]] && sudo test -f "${STRATUM_DIR}/config/lbry.conf"; then
+  old_mp="$(sudo awk -F '=' '/^\[SQL\]/{f=1;next} /^\[/{f=0} f && $1 ~ /^[ \t]*password[ \t]*$/ {gsub(/^[ \t]+|[ \t\r]+$/,"",$2); print $2; exit}' "${STRATUM_DIR}/config/lbry.conf" 2>/dev/null || true)"
+  [[ -n "${old_mp}" && "${old_mp}" != "patofpaq" ]] && SECRETS[MYSQL_STRATUMPASSWD]="${old_mp}"
+fi
+
 for key in LBC_RPCUSER LBC_RPCPASS LBC_WALLET_PASS STRATUM_PASSWORD MYSQL_PANELPASSWD MYSQL_STRATUMPASSWD; do
   [[ -n "${SECRETS[${key}]:-}" ]] || SECRETS[${key}]="$(gen_secret)"
 done
@@ -430,40 +588,64 @@ if ! id lbc &>/dev/null; then
   sudo useradd --system --home-dir "${LBC_HOME}" --create-home --shell /usr/sbin/nologin lbc
 fi
 sudo install -d -o lbc -g lbc -m 0750 "${LBC_HOME}" "${LBCD_DIR}" "${LBCWALLET_DIR}"
+sudo install -d -m 0750 -o root -g lbc "${POOL_ETC}"
 
-# lbcd: RPC on localhost only, without TLS (lbcd only allows --notls on localhost)
-sudo tee "${LBCD_DIR}/lbcd.conf" >/dev/null <<EOF
+# lbcd config: preserve an existing external lbcd.conf (e.g. /etc/lbcd/lbcd.conf or ~/.lbcd/lbcd.conf);
+# also write ${LBCD_DIR}/lbcd.conf with the active credentials.
+if [[ "${LBCD_NOTLS}" == 1 ]]; then
+  LBCD_TLS_LINE="notls=1"
+  LBCWALLET_CLIENT_TLS_LINE="noclienttls=1"
+  LBCCTL_TLS_LINE="notls=1"
+else
+  sudo cp -a "${LBCD_CERT}" "${POOL_ETC}/lbcd-rpc.cert" 2>/dev/null || true
+  sudo chown root:lbc "${POOL_ETC}/lbcd-rpc.cert" 2>/dev/null || true
+  sudo chmod 0640 "${POOL_ETC}/lbcd-rpc.cert" 2>/dev/null || true
+  LBCD_TLS_LINE="rpccert=${LBCD_CERT}"
+  LBCWALLET_CLIENT_TLS_LINE="cafile=${LBCD_CERT}"
+  LBCCTL_TLS_LINE="rpccert=${LBCD_CERT}"
+fi
+
+if [[ -z "${EXISTING_LBCD_CONF}" || "${EXISTING_LBCD_CONF}" == "${LBCD_DIR}/lbcd.conf" ]]; then
+  backup_file "${LBCD_DIR}/lbcd.conf"
+  sudo tee "${LBCD_DIR}/lbcd.conf" >/dev/null <<EOF
 [Application Options]
 rpcuser=${SECRETS[LBC_RPCUSER]}
 rpcpass=${SECRETS[LBC_RPCPASS]}
 rpclisten=${LBCD_RPC}
-notls=1
+${LBCD_TLS_LINE}
 txindex=1
 EOF
+  sudo chown lbc:lbc "${LBCD_DIR}/lbcd.conf"
+  sudo chmod 0600 "${LBCD_DIR}/lbcd.conf"
+  LBCD_CONF_PATH="${LBCD_DIR}/lbcd.conf"
+fi
 
 # lbcwallet: uses the same credentials for its own RPC server and for lbcd;
 # stratum and the web backend talk to lbcwallet, which proxies chain RPCs to lbcd.
-sudo tee "${LBCWALLET_DIR}/lbcwallet.conf" >/dev/null <<EOF
+WALLET_OWNER="$(sudo stat -c '%U' "${LBCWALLET_APPDATA}" 2>/dev/null || echo lbc)"
+backup_file "${LBCWALLET_CONF_PATH}"
+sudo install -d -m 0750 "$(dirname "${LBCWALLET_CONF_PATH}")"
+sudo tee "${LBCWALLET_CONF_PATH}" >/dev/null <<EOF
 [Application Options]
 rpcuser=${SECRETS[LBC_RPCUSER]}
 rpcpass=${SECRETS[LBC_RPCPASS]}
 rpcconnect=${LBCD_RPC}
-noclienttls=1
+${LBCWALLET_CLIENT_TLS_LINE}
 rpclisten=${LBCWALLET_RPC}
 noservertls=1
 passphrase=${SECRETS[LBC_WALLET_PASS]}
 EOF
-sudo chown lbc:lbc "${LBCD_DIR}/lbcd.conf" "${LBCWALLET_DIR}/lbcwallet.conf"
-sudo chmod 0600 "${LBCD_DIR}/lbcd.conf" "${LBCWALLET_DIR}/lbcwallet.conf"
+sudo chown "${WALLET_OWNER}:${WALLET_OWNER}" "${LBCWALLET_CONF_PATH}" 2>/dev/null || true
+sudo chmod 0600 "${LBCWALLET_CONF_PATH}"
 
 # Create the pool wallet once; the seed is written to SEED_FILE for the operator to back up
-wallet_exists() { [[ -n "$(sudo find "${LBCWALLET_DIR}" -name wallet.db -print -quit 2>/dev/null)" ]]; }
+wallet_exists() { [[ -n "$(sudo find "${LBCWALLET_APPDATA}" -name wallet.db -print -quit 2>/dev/null)" ]]; }
 if ! wallet_exists; then
   output "Creating the pool wallet"
   CREATE_OUT="$(mktemp)"
   # shellcheck disable=SC2024 # output file is intentionally owned by the installing user
-  (printf 'no\n' | sudo -u lbc /usr/local/bin/lbcwallet -C "${LBCWALLET_DIR}/lbcwallet.conf" \
-    -A "${LBCWALLET_DIR}" --create >"${CREATE_OUT}" 2>&1) &
+  (printf 'no\n' | sudo -u "${WALLET_OWNER}" /usr/local/bin/lbcwallet -C "${LBCWALLET_CONF_PATH}" \
+    -A "${LBCWALLET_APPDATA}" --create >"${CREATE_OUT}" 2>&1) &
   CREATE_PID=$!
   for _ in $(seq 1 90); do
     wallet_exists && break
@@ -471,7 +653,7 @@ if ! wallet_exists; then
     sleep 1
   done
   sleep 3
-  sudo pkill -u lbc -f 'lbcwallet.*--create' 2>/dev/null || true
+  sudo pkill -u "${WALLET_OWNER}" -f 'lbcwallet.*--create' 2>/dev/null || true
   wait "${CREATE_PID}" 2>/dev/null || true
   if wallet_exists; then
     (umask 077 && {
@@ -484,7 +666,7 @@ if ! wallet_exists; then
   else
     output "WARNING: wallet creation did not finish. Output:"
     cat "${CREATE_OUT}"
-    output "Create it manually: sudo -u lbc lbcwallet -C ${LBCWALLET_DIR}/lbcwallet.conf -A ${LBCWALLET_DIR} --create"
+    output "Create it manually: sudo -u ${WALLET_OWNER} lbcwallet -C ${LBCWALLET_CONF_PATH} -A ${LBCWALLET_APPDATA} --create"
   fi
   rm -f "${CREATE_OUT}"
 fi
@@ -495,10 +677,11 @@ install -d -m 0700 "${HOME}/.lbcctl"
 [Application Options]
 rpcuser=${SECRETS[LBC_RPCUSER]}
 rpcpass=${SECRETS[LBC_RPCPASS]}
-notls=1
+${LBCCTL_TLS_LINE}
 EOF
 )
-lbcctl_wallet() { lbcctl -C "${HOME}/.lbcctl/lbcctl.conf" --wallet -s "${LBCWALLET_RPC}" "$@"; }
+# Wallet RPC always runs with noservertls=1 on localhost
+lbcctl_wallet() { lbcctl -C "${HOME}/.lbcctl/lbcctl.conf" --notls --wallet -s "${LBCWALLET_RPC}" "$@"; }
 
 # Phase 5: Database ############################################################
 clear
@@ -576,12 +759,22 @@ sudo tee "${POOL_ETC}/lbcctl.conf" >/dev/null <<EOF
 [Application Options]
 rpcuser=${SECRETS[LBC_RPCUSER]}
 rpcpass=${SECRETS[LBC_RPCPASS]}
-notls=1
+${LBCCTL_TLS_LINE}
 EOF
-# Non-secret settings for pool-start.sh (COIN_ID is filled in once the coin record exists)
-if [[ ! -f "${POOL_ETC}/pool.env" ]]; then
-  echo "COIN_ID=" | sudo tee "${POOL_ETC}/pool.env" >/dev/null
-fi
+# Non-secret settings for pool-start.sh (COIN_ID is updated once the coin record exists)
+write_pool_env() {
+  sudo tee "${POOL_ETC}/pool.env" >/dev/null <<EOF
+COIN_ID=${1:-}
+LBCD_RPC=${LBCD_RPC}
+LBCWALLET_RPC=${LBCWALLET_RPC}
+LBCD_CONF=${LBCD_CONF_PATH}
+LBCWALLET_CONF=${LBCWALLET_CONF_PATH}
+LBCWALLET_APPDATA=${LBCWALLET_APPDATA}
+LBCD_NOTLS=${LBCD_NOTLS}
+LBCD_CERT=${LBCD_CERT:+${POOL_ETC}/lbcd-rpc.cert}
+EOF
+}
+write_pool_env ""
 sudo chown root:lbc "${POOL_ETC}/blocknotify.env" "${POOL_ETC}/lbcctl.conf" "${POOL_ETC}/pool.env"
 sudo chmod 0640 "${POOL_ETC}/blocknotify.env" "${POOL_ETC}/lbcctl.conf" "${POOL_ETC}/pool.env"
 
@@ -648,11 +841,10 @@ UPDATE coins SET master_wallet='${MASTER_WALLET}' WHERE symbol='LBC' AND '${MAST
 EOF
 COIN_ID="$(mysql_root -N -e "SELECT id FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1")"
 [[ -n "${COIN_ID}" ]] || displayErr "Could not create the LBC coin record."
-echo "COIN_ID=${COIN_ID}" | sudo tee "${POOL_ETC}/pool.env" >/dev/null
+write_pool_env "${COIN_ID}"
 
 # Stratum config (written in full; the old sed edits did not match config.sample).
 # Tuned values of an existing config are carried over.
-ini_value() { sudo awk -F '=' -v k="$2" '{ gsub(/[ \t\r]/, "", $1); gsub(/^[ \t]+|[ \t\r]+$/, "", $2) } $1 == k { print $2; exit }' "$1" 2>/dev/null || true; }
 STRATUM_DIFF=128
 STRATUM_MAX_TTF=40000000
 if sudo test -f "${STRATUM_DIR}/config/lbry.conf"; then
