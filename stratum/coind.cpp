@@ -93,10 +93,11 @@ bool coind_validate_address(YAAMP_COIND *coind)
 {
 	if(!coind->wallet[0]) return false;
 
-	char params[YAAMP_SMALLBUFSIZE];
+	char params[1088];
 	snprintf(params, sizeof(params), "[\"%s\"]", coind->wallet);
 
-	json_value *json = rpc_call(&coind->rpc, "validateaddress", params);
+	YAAMP_RPC *rpc = coind->rpc_wallet.port ? &coind->rpc_wallet : &coind->rpc;
+	json_value *json = rpc_call(rpc, "validateaddress", params);
 	if(!json) return false;
 
 	json_value *json_result = json_get_object(json, "result");
@@ -169,7 +170,7 @@ bool coind_validate_address(YAAMP_COIND *coind)
 void coind_init(YAAMP_COIND *coind)
 {
 	char params[YAAMP_SMALLBUFSIZE];
-	char account[YAAMP_SMALLBUFSIZE];
+	char account[256];
 
 	yaamp_create_mutex(&coind->mutex);
 
@@ -183,10 +184,11 @@ void coind_init(YAAMP_COIND *coind)
 
 	snprintf(params, sizeof(params), "[\"%s\"]", account);
 
-	json_value *json = rpc_call(&coind->rpc, "getaccountaddress", params);
+	YAAMP_RPC *rpc = coind->rpc_wallet.port ? &coind->rpc_wallet : &coind->rpc;
+	json_value *json = rpc_call(rpc, "getaccountaddress", params);
 	if(!json)
 	{
-		json = rpc_call(&coind->rpc, "getaddressesbyaccount", params);
+		json = rpc_call(rpc, "getaddressesbyaccount", params);
 		if (json && json_is_array(json) && json->u.object.length) {
 			debuglog("is array...");
 			if (json->u.object.values[0].value->type == json_string)
@@ -198,7 +200,11 @@ void coind_init(YAAMP_COIND *coind)
 		}
 	}
 
-	if (json->u.object.values[0].value->type == json_string) {
+	json_value *json_res = json_get_val(json, "result");
+	if (json_res && json_res->type == json_string) {
+		snprintf(coind->wallet, sizeof(coind->wallet), "%s", json_res->u.string.ptr);
+	}
+	else if (json->u.object.length && json->u.object.values[0].value->type == json_string) {
 		snprintf(coind->wallet, sizeof(coind->wallet), "%s", json->u.object.values[0].value->u.string.ptr);
 	}
 	else {
@@ -220,8 +226,10 @@ void coind_terminate(YAAMP_COIND *coind)
 	debuglog("disconnecting from coind %s\n", coind->symbol);
 
 	rpc_close(&coind->rpc);
+	if (coind->rpc_wallet.port) rpc_close(&coind->rpc_wallet);
 #ifdef HAVE_CURL
 	if (coind->rpc.curl) rpc_curl_close(&coind->rpc);
+	if (coind->rpc_wallet.curl) rpc_curl_close(&coind->rpc_wallet);
 #endif
 
 	pthread_mutex_unlock(&coind->mutex);

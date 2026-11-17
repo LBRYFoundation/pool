@@ -18,8 +18,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template_memorypool(YAAMP_COIND *coind)
 		return NULL;
 	}
 
-	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
-	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE();
 
 	templ->created = time(NULL);
 	templ->value = json_get_int(json_result, "coinbasevalue");
@@ -69,8 +68,12 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	json_value *json = rpc_call(&coind->rpc, "getblocktemplate", params);
 	if(!json || json_is_null(json))
 	{
-		if (!strcmp(coind->rpcencoding, "LBC") || !strcmp(coind->symbol, "LBC"))
-			debuglog("%s getblocktemplate failed\n", coind->symbol);
+		if (!strcmp(coind->rpcencoding, "LBC") || !strcmp(coind->symbol, "LBC")) {
+			char curl_err[256] = { 0 };
+			rpc_curl_get_lasterr(curl_err, sizeof(curl_err));
+			debuglog("%s getblocktemplate failed (%s:%d%s%s)\n", coind->symbol,
+				coind->rpc.host, coind->rpc.port, curl_err[0] ? ": " : "", curl_err);
+		}
 		else
 			coind_error(coind, "getblocktemplate");
 		return NULL;
@@ -79,9 +82,45 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	json_value *json_result = json_get_object(json, "result");
 	if(!json_result || json_is_null(json_result))
 	{
-		coind_error(coind, "getblocktemplate result");
-		json_value_free(json);
-		return NULL;
+		json_value *json_err = json_get_object(json, "error");
+		const char *err_msg = json_err ? json_get_string(json_err, "message") : NULL;
+		int err_code = json_err ? (int)json_get_int(json_err, "code") : 0;
+
+		// If coins.rpcport was pointed at lbcwallet (e.g. 9244), lbcwallet returns -32601 Method not found
+		// for getblocktemplate because mining RPCs are served by lbcd (default port 9245).
+		if (err_code == -32601 && (!strcmp(coind->symbol, "LBC") || !strcmp(coind->rpcencoding, "LBC")) && coind->rpc.port != 9245) {
+			if (!coind->rpc_wallet.port) {
+				coind->rpc_wallet = coind->rpc;
+				coind->rpc_wallet.CURL = NULL;
+				coind->rpc_wallet.sock = 0;
+				yaamp_create_mutex(&coind->rpc_wallet.mutex);
+			}
+			int old_port = coind->rpc.port;
+			coind->rpc.port = 9245;
+			coind->rpc.curl = 1;
+			stratumlog("%s RPC on %s:%d returned '%s' for getblocktemplate (likely lbcwallet); "
+				"switching mining RPC to lbcd on %s:%d and keeping wallet RPC on :%d\n",
+				coind->symbol, coind->rpc.host, old_port, err_msg ? err_msg : "Method not found",
+				coind->rpc.host, coind->rpc.port, old_port);
+			json_value_free(json);
+			json = rpc_call(&coind->rpc, "getblocktemplate", params);
+			json_result = json ? json_get_object(json, "result") : NULL;
+			if (!json || !json_result || json_is_null(json_result)) {
+				json_err = json ? json_get_object(json, "error") : NULL;
+				err_msg = json_err ? json_get_string(json_err, "message") : NULL;
+				stratumlog("%s getblocktemplate result error on %s:%d: %s\n",
+					coind->symbol, coind->rpc.host, coind->rpc.port, err_msg ? err_msg : "no result");
+				if (json) json_value_free(json);
+				return NULL;
+			}
+		} else {
+			if (err_msg && err_msg[0])
+				stratumlog("%s getblocktemplate error (%d): %s\n", coind->symbol, err_code, err_msg);
+			else
+				coind_error(coind, "getblocktemplate result");
+			json_value_free(json);
+			return NULL;
+		}
 	}
 
 	// segwit rule
@@ -114,8 +153,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 
 	json_value *json_coinbaseaux = json_get_object(json_result, "coinbaseaux");
 
-	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE;
-	memset(templ, 0, sizeof(YAAMP_JOB_TEMPLATE));
+	YAAMP_JOB_TEMPLATE *templ = new YAAMP_JOB_TEMPLATE();
 
 	templ->created = time(NULL);
 	templ->value = json_get_int(json_result, "coinbasevalue");

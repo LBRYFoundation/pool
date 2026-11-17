@@ -113,9 +113,13 @@ class db_coins extends CActiveRecord
 			return CHtml::link($label, $url, $htmlOpts);
 		}
 		else if (YIIMP_PUBLIC_EXPLORER || $force || user()->getState('yaamp_admin')) {
-			$urlParams = array_merge(array('id'=>$this->id), $params);
-			Yii::import('application.modules.explorer.ExplorerController');
-			$url = ExplorerController::createUrl('/explorer', $urlParams);
+			if ($this->visible && !is_numeric($this->symbol)) {
+				unset($params['id']);
+				$url = Yii::app()->createUrl('/explorer/'.$this->symbol, $params);
+			} else {
+				$urlParams = array_merge(array('id'=>$this->id), $params);
+				$url = Yii::app()->createUrl('/explorer', $urlParams);
+			}
 			return CHtml::link($label, trim($url,'?'), $htmlOptions);
 		}
 		return $label;

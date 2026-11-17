@@ -898,21 +898,21 @@ else
   fi
 fi
 
-# LBC coin row: stratum/web talk to lbcwallet, which proxies chain RPCs to lbcd.
-# On upgrades the existing row (lbrycrdd on port 14390) is repointed to lbcwallet.
+# LBC coin row: stratum/web talk to lbcwallet (wallet RPCs) and lbcd (mining RPCs).
+# rpccurl=1 is required because lbcwallet/lbcd use HTTP chunked transfer encoding.
 mysql_root "${DB_NAME}" <<EOF
 INSERT INTO coins (name, symbol, algo, image, enable, auto_ready, visible, installed,
   rpchost, rpcport, rpcuser, rpcpasswd, rpcencoding, rpccurl, rpcssl, account,
   hassubmitblock, hasgetinfo, usesegwit, txmessage, mature_blocks, block_time,
   conf_folder, program, link_site, link_github)
 SELECT 'LBRY Credits', 'LBC', 'lbry', '/images/coin-LBRY.png', 1, 1, 1, 1,
-  '127.0.0.1', ${LBCWALLET_RPC##*:}, '${SECRETS[LBC_RPCUSER]}', '${SECRETS[LBC_RPCPASS]}', 'LBC', 0, 0, 'default',
+  '127.0.0.1', ${LBCWALLET_RPC##*:}, '${SECRETS[LBC_RPCUSER]}', '${SECRETS[LBC_RPCPASS]}', 'LBC', 1, 0, 'default',
   1, 1, 1, 0, 100, 150,
   '${LBCWALLET_DIR}', 'lbcwallet', 'https://lbry.com', 'https://github.com/lbryio/lbcd'
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM coins WHERE symbol='LBC');
 UPDATE coins SET algo='lbry', rpchost='127.0.0.1', rpcport=${LBCWALLET_RPC##*:},
   rpcuser='${SECRETS[LBC_RPCUSER]}', rpcpasswd='${SECRETS[LBC_RPCPASS]}',
-  rpcencoding='LBC', rpccurl=0, rpcssl=0, rpccert=NULL, installed=1, hasgetinfo=1,
+  rpcencoding='LBC', rpccurl=1, rpcssl=0, rpccert=NULL, installed=1, hasgetinfo=1,
   account=IF(IFNULL(account,'')='', 'default', account),
   conf_folder='${LBCWALLET_DIR}', program='lbcwallet'
   WHERE symbol='LBC';
@@ -1059,6 +1059,11 @@ define('YAAMP_NOTIFY_NEW_COINS', false);
 define('YAAMP_CREATE_NEW_COINS', false);
 define('YAAMP_DEFAULT_ALGO', 'lbry');
 define('YAAMP_USE_NGINX', true);
+
+define('LBC_DAEMON_HOST', '${LBCD_RPC%:*}');
+define('LBC_DAEMON_PORT', ${LBCD_RPC##*:});
+define('LBC_DAEMON_SSL', $([[ "${LBCD_NOTLS}" == 1 ]] && echo false || echo true));
+define('LBC_DAEMON_CERT', '${LBCD_CERT:+${POOL_ETC}/lbcd-rpc.cert}');
 
 \$cold_wallet_table = ${WEBCFG[cold_wallet_table]};
 \$configFixedPoolFees = ${WEBCFG[configFixedPoolFees]};

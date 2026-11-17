@@ -203,8 +203,7 @@ bool client_initialize_multialgo(YAAMP_CLIENT *client)
 	}
 
 	char tmp[1024];
-	memset(tmp, 0, 1024);
-	strncpy(tmp, client->password, 1023);
+	snprintf(tmp, sizeof(tmp), "%s", client->password);
 
 	p = tmp;
 	while(p)

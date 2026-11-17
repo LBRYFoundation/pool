@@ -225,8 +225,6 @@ void job_update()
 
 	////////////////////////////////////////////////////////////////////////////////////////////////
 
-	int ready = 0;
-
 	g_list_job.Enter();
 	for(CLI li = g_list_job.first; li; li = li->next)
 	{
@@ -234,7 +232,6 @@ void job_update()
 		if(!job_can_mine(job)) continue;
 
 		job_broadcast(job);
-		ready++;
 	}
 
 	g_list_job.Leave();

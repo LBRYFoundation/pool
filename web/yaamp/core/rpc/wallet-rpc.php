@@ -44,6 +44,14 @@ class WalletRPC {
 				$this->type = 'Bitcoin';
 				$this->rpc = new Bitcoin($coin->rpcuser, $coin->rpcpasswd, $coin->rpchost, $coin->rpcport, $url);
 				$this->hasGetInfo = $coin->hasgetinfo;
+				if (($coin->rpcencoding == 'LBC' || $coin->symbol == 'LBC') && defined('LBC_DAEMON_PORT') && intval(LBC_DAEMON_PORT) > 0 && intval(LBC_DAEMON_PORT) != intval($coin->rpcport)) {
+					$daemon_host = defined('LBC_DAEMON_HOST') ? LBC_DAEMON_HOST : $coin->rpchost;
+					$this->rpc_wallet = new Bitcoin($coin->rpcuser, $coin->rpcpasswd, $daemon_host, intval(LBC_DAEMON_PORT), $url);
+					if (defined('LBC_DAEMON_SSL') && LBC_DAEMON_SSL) {
+						$cert = defined('LBC_DAEMON_CERT') && strlen(LBC_DAEMON_CERT) ? LBC_DAEMON_CERT : null;
+						$this->rpc_wallet->setSSL($cert);
+					}
+				}
 			}
 
 		} else {
@@ -406,6 +414,11 @@ class WalletRPC {
 				break;
 			default:
 				$res = $this->rpc->__call($method,$params);
+				if ($res === false && isset($this->rpc_wallet) && stripos((string)$this->rpc->error, 'method not found') !== false) {
+					$res = $this->rpc_wallet->__call($method,$params);
+					$this->error = $this->rpc_wallet->error;
+					return $res;
+				}
         	}
 
 		$this->error = $this->rpc->error;

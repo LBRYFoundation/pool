@@ -75,3 +75,10 @@ if (!defined('NICEHASH_DEPOSIT_AMOUNT')) define('NICEHASH_DEPOSIT_AMOUNT','0.01'
 // cli stuff
 if (!defined('YIIMP_CLI_ALLOW_TXS')) define('YIIMP_CLI_ALLOW_TXS', false);
 
+// LBRY daemon (lbcd) RPC fallback for chain/mining methods not served by lbcwallet (e.g. getblocktemplate, submitblock, getclaimtrie)
+if (!defined('LBC_DAEMON_HOST')) define('LBC_DAEMON_HOST', '127.0.0.1');
+if (!defined('LBC_DAEMON_PORT')) define('LBC_DAEMON_PORT', 9245);
+if (!defined('LBC_DAEMON_SSL')) define('LBC_DAEMON_SSL', false);
+if (!defined('LBC_DAEMON_CERT')) define('LBC_DAEMON_CERT', '');
+
+

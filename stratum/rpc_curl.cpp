@@ -199,7 +199,7 @@ static int sockopt_keepalive_cb(void *userdata, curl_socket_t fd,
 
 static json_value *curl_json_rpc(YAAMP_RPC *rpc, const char *url, const char *rpc_req, int *curl_err)
 {
-	char len_hdr[64] = { 0 }, auth_hdr[512] = { 0 };
+	char len_hdr[64] = { 0 }, auth_hdr[1088] = { 0 };
 	char curl_err_str[CURL_ERROR_SIZE] = { 0 };
 	struct data_buffer all_data = { 0 };
 	struct upload_buffer upload_data;
@@ -220,9 +220,12 @@ static json_value *curl_json_rpc(YAAMP_RPC *rpc, const char *url, const char *rp
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 
 	if (rpc->ssl) {
-		curl_easy_setopt(curl, CURLOPT_SSLVERSION, 1); // TLSv1
-		if (strlen(rpc->cert))
+		if (strlen(rpc->cert)) {
 			curl_easy_setopt(curl, CURLOPT_CAINFO, rpc->cert);
+		} else {
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+		}
 	}
 
 	curl_easy_setopt(curl, CURLOPT_ENCODING, "");
@@ -386,9 +389,9 @@ static json_value *rpc_curl_do_call(YAAMP_RPC *rpc, char const *data)
 {
 	CommonLock(&rpc->mutex);
 
-	char url[1024];
+	char url[1088];
 	int curl_err = 0;
-	sprintf(url, "http%s://%s:%d", rpc->ssl?"s":"", rpc->host, rpc->port);
+	snprintf(url, sizeof(url), "http%s://%s:%d", rpc->ssl?"s":"", rpc->host, rpc->port);
 	strcpy(curl_last_err, "");
 
 	json_value *res = curl_json_rpc(rpc, url, data, &curl_err);

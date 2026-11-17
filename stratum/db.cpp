@@ -304,7 +304,7 @@ void db_update_algos(YAAMP_DB *db)
 		db_query(db, "UPDATE algos SET overflow=true WHERE name='%s'", g_stratum_algo);
 	}
 
-	char symbol[32] = "NULL";
+	char symbol[264] = "NULL";
 	if(g_list_coind.count == 1) {
 		if (g_list_coind.first) {
 			CLI li = g_list_coind.first;
@@ -434,7 +434,7 @@ void db_update_coinds(YAAMP_DB *db)
 			snprintf(coind->rpc.host, sizeof(coind->rpc.host), "%s", buffer);
 		}
 
-		if(row[3]) coind->rpc.port = atoi(row[3]);
+		if(row[3] && !coind->rpc_wallet.port) coind->rpc.port = atoi(row[3]);
 
 		if(row[4] && row[5])
 		{
@@ -467,7 +467,7 @@ void db_update_coinds(YAAMP_DB *db)
 
 		if(row[14]) snprintf(coind->algo, sizeof(coind->algo), "%s", row[14]);
 
-		if(row[24]) coind->rpc.curl = atoi(row[24]) != 0;
+		if(row[24] && !coind->rpc_wallet.port) coind->rpc.curl = atoi(row[24]) != 0;
 		if(row[25]) coind->rpc.ssl = atoi(row[25]) != 0;
 		if(row[26]) snprintf(coind->rpc.cert, sizeof(coind->rpc.cert), "%s", row[26]);
 

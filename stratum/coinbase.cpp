@@ -14,7 +14,7 @@ static void encode_tx_value(char *encoded, json_int_t value)
 static void p2sh_pack_tx(YAAMP_COIND *coind, char *data, json_int_t amount, char *payee)
 {
 	char evalue[32];
-	char coinb2_part[256];
+	char coinb2_part[1032];
 	char coinb2_len[4];
 	snprintf(coinb2_part, sizeof(coinb2_part), "a9%02x%s87", (unsigned int)(strlen(payee) >> 1) & 0xFF, payee);
 	snprintf(coinb2_len, sizeof(coinb2_len), "%02x", (unsigned int)(strlen(coinb2_part) >> 1) & 0xFF);
@@ -48,7 +48,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 {
 	char eheight[32], etime[32];
 	char entime[32] = { 0 };
-	char commitment[128] = { 0 };
+	char commitment[160] = { 0 };
 
 	ser_number(templ->height, eheight);
 	ser_number(time(NULL), etime);
@@ -57,7 +57,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 	if(coind->txmessage)
 		strcpy(eversion1, "02000000");
 
-	char script1[4*1024];
+	char script1[1024];
 	snprintf(script1, sizeof(script1), "%s%s%s08", eheight, templ->flags, etime);
 
 	// Encode configurable coinbase signature (default "/lbrypool.net/") into hex.
@@ -80,15 +80,15 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 	hexlify(script2, (const unsigned char *)sig, (int)sig_len);
 
 	int script_len = (int)(strlen(script1)/2 + strlen(script2)/2 + 8);
-	sprintf(templ->coinb1, "%s%s01"
+	snprintf(templ->coinb1, sizeof(templ->coinb1), "%s%s01"
 		"0000000000000000000000000000000000000000000000000000000000000000"
-		"ffffffff%02x%s", eversion1, entime, script_len, script1);
+		"ffffffff%02x%s", eversion1, entime, script_len & 0xFF, script1);
 
-	sprintf(templ->coinb2, "%s00000000", script2);
+	snprintf(templ->coinb2, sizeof(templ->coinb2), "%s00000000", script2);
 
 	// segwit commitment, if needed
 	if (templ->has_segwit_txs)
-		snprintf(commitment, sizeof(commitment), "0000000000000000%02x%s", (int)(strlen(coind->commitment)/2), coind->commitment);
+		snprintf(commitment, sizeof(commitment), "0000000000000000%02x%s", (unsigned int)(strlen(coind->commitment)/2) & 0xFF, coind->commitment);
 
 	json_int_t available = templ->value;
 
@@ -96,7 +96,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 	if(coind->charity_percent > 0 && strlen(coind->charity_address) > 0)
 	{
 		char script_payee[1024] = { 0 };
-		char charity_payee[256] = { 0 };
+		char charity_payee[1024] = { 0 };
 		const char *payee = json_get_string(json_result, "payee");
 		if (payee) snprintf(charity_payee, sizeof(charity_payee), "%s", payee);
 		else snprintf(charity_payee, sizeof(charity_payee), "%s", coind->charity_address);

@@ -1,7 +1,7 @@
 CC=gcc
 CXX=g++
 
-CFLAGS= -g -O2 -Wall -Wno-unused-function -Wno-unused-variable
+CFLAGS= -g -O2 -Wall -Wno-unused-function -Wno-unused-variable -fno-strict-aliasing
 SQLCFLAGS= $(shell mysql_config --cflags 2>/dev/null || mariadb_config --cflags 2>/dev/null)
 SQLLIBS= $(shell mysql_config --libs 2>/dev/null || mariadb_config --libs 2>/dev/null || echo "-lmysqlclient")
 
@@ -57,6 +57,7 @@ clean:
 	rm -f *.o $(OUTPUT)
 	rm -f algos/*.o algos/*.a
 	rm -f sha3/*.o sha3/*.a
+	rm -f iniparser/src/*.o iniparser/*.a
 
 install: clean all
 	strip $(OUTPUT)
