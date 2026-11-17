@@ -64,14 +64,24 @@ lbcwallet_ready() {
 }
 
 wait_lbcd() {
-  local i
-  for i in $(seq 1 120); do
+  local i max_wait="${1:-15}"
+  for i in $(seq 1 "${max_wait}"); do
     lbcd_ready && return 0
-    [[ ${i} -eq 1 ]] && echo "waiting for lbcd RPC on ${LBCD_RPC} ..."
+    [[ ${i} -eq 1 ]] && echo "checking lbcd RPC on ${LBCD_RPC} (up to ${max_wait}s) ..."
     sleep 1
   done
-  echo "WARNING: lbcd RPC not answering yet (still loading?); check: sudo tmux attach -t lbcd"
+  echo "NOTE: lbcd RPC not answering yet (can take 30+ min while loading/syncing); check: sudo tmux attach -t lbcd"
   return 1
+}
+
+unlock_wallet() {
+  if [[ -f "${POOL_ETC}/blocknotify.env" ]]; then
+    local wpass
+    wpass="$(awk -F '=' '$1=="LBC_WALLET_PASS"{print substr($0, index($0,"=")+1); exit}' "${POOL_ETC}/blocknotify.env" 2>/dev/null || true)"
+    if [[ -n "${wpass}" ]]; then
+      lbcctl -C "${POOL_ETC}/lbcctl.conf" --notls --wallet -s "${LBCWALLET_RPC}" walletpassphrase "${wpass}" 315360000 >/dev/null 2>&1 || true
+    fi
+  fi
 }
 
 start_lbcd() {
@@ -85,14 +95,23 @@ start_lbcd() {
 }
 
 start_lbcwallet() {
-  wait_lbcd || true
   if lbcwallet_ready || pgrep -x lbcwallet >/dev/null; then
     echo "lbcwallet: already running on host"
+    lbcwallet_ready && unlock_wallet
     return
   fi
+  wait_lbcd 15 || true
   local owner
   owner="$(stat -c '%U' "${LBCWALLET_APPDATA}" 2>/dev/null || echo lbc)"
   start lbcwallet "runuser -u ${owner} -- /usr/local/bin/lbcwallet --configfile=${LBCWALLET_CONF} --appdata=${LBCWALLET_APPDATA}"
+  # Try unlocking once lbcwallet's RPC comes up
+  for _ in $(seq 1 10); do
+    if lbcwallet_ready; then
+      unlock_wallet
+      break
+    fi
+    sleep 1
+  done
 }
 
 start_stratum() {

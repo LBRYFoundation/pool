@@ -22,13 +22,14 @@ TO INSTALL:
 1. Log in to your server (as `root` or a user with `sudo` rights)
 2. `git clone https://github.com/LBRYFoundation/pool.git && cd pool`
    (add `--branch <branch>` to test a branch)
-3. `./install.sh`
+3. `./install.sh` (or `./install.sh -p <wallet-passphrase>` if reusing an existing encrypted `lbcwallet`)
 4. Follow the instructions on the screen.
 
 Optional environment overrides (e.g. `PHP_VERSION=8.4 ./install.sh`):
 
-| Variable | Effect |
+| Variable / Flag | Effect |
 |---|---|
+| `-p <pass>` / `--wallet-passphrase <pass>` / `LBC_WALLET_PASS` | passphrase for a pre-existing `lbcwallet` (written to `lbcwallet.conf` and used to unlock the wallet via RPC on start) |
 | `PHP_VERSION` | install that PHP version from `ppa:ondrej/php` instead of the distribution's PHP 8.x |
 | `LBCD_VERSION` / `LBCWALLET_VERSION` | pin a release tag, e.g. `v0.22.119` (default: latest) |
 | `GO_VERSION` | pin the Go toolchain, e.g. `go1.27.4` (default: latest stable) |

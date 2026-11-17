@@ -11,10 +11,15 @@
 #
 # Usage:
 #   Run from a checkout of this repository as root or a regular user with sudo rights:
-#     ./install.sh
+#     ./install.sh [-p|--wallet-passphrase <passphrase>]
 #   (If run outside a checkout, POOL_REPO / POOL_BRANCH are cloned instead.)
 #
+# Command-line options:
+#   -p, --wallet-passphrase <pass>  passphrase for an existing lbcwallet (to unlock
+#                                   it on start and via RPC; also LBC_WALLET_PASS env)
+#
 # Optional environment overrides:
+#   LBC_WALLET_PASS=<pass>    passphrase for an existing lbcwallet
 #   PHP_VERSION=8.4           install this PHP version from ppa:ondrej/php
 #                             (default: the distribution's PHP 8.x package)
 #   LBCD_VERSION=v0.22.119    pin the lbcd release      (default: latest release)
@@ -97,6 +102,28 @@ SQL_DUMP="2016-04-03-yaamp.sql.gz"
 SECRETS_FILE="${HOME}/.lbcpool-secrets"
 CREDENTIALS_FILE="${HOME}/pool-credentials.txt"
 SEED_FILE="${HOME}/lbcwallet-seed.txt"
+
+CLI_WALLET_PASS="${LBC_WALLET_PASS:-}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p | --wallet-passphrase | --passphrase)
+      [[ $# -ge 2 ]] || displayErr "Option $1 requires a passphrase argument."
+      CLI_WALLET_PASS="$2"
+      shift 2
+      ;;
+    --wallet-passphrase=* | --passphrase=*)
+      CLI_WALLET_PASS="${1#*=}"
+      shift
+      ;;
+    -h | --help)
+      echo "Usage: $0 [-p|--wallet-passphrase <passphrase>]"
+      exit 0
+      ;;
+    *)
+      displayErr "Unknown option: $1 (Usage: $0 [-p|--wallet-passphrase <passphrase>])"
+      ;;
+  esac
+done
 
 ################################################################################
 # Main routine
@@ -207,14 +234,14 @@ SERVER_NAME="${CONFMAP['SERVER_NAME']}"
 SERVER_NAMES="${SERVER_NAME}"
 is_yes "${CONFMAP['SUB_DOMAIN']}" || SERVER_NAMES+=" www.${SERVER_NAME}"
 
-# Wallet cutover check: the original pool paid out of the lbrycrdd wallet, whose
-# funds and coinbase transactions are not visible to the new lbcwallet.
+# Wallet cutover check: only warn if migrating from legacy lbrycrdd (port 14390)
+# when no lbcd/lbcwallet is already present on the host.
 UPGRADE_NOTES=()
-if [[ ${UPGRADE} -eq 1 ]] && command -v mysql &>/dev/null; then
-  LBC_ROW="$(mysql_root -N -e "SELECT id, IFNULL(rpcport,0), IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
+if [[ ${UPGRADE} -eq 1 ]] && command -v mysql &>/dev/null && ! pgrep -x lbcd >/dev/null && ! pgrep -x lbcwallet >/dev/null; then
+  LBC_ROW="$(mysql_root -N -e "SELECT id, IFNULL(rpcport,0), IFNULL(program,''), IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
   if [[ -n "${LBC_ROW}" ]]; then
-    read -r OLD_COIN_ID OLD_RPCPORT OLD_MASTER_WALLET <<<"${LBC_ROW}"
-    if [[ "${OLD_RPCPORT}" != "${LBCWALLET_RPC##*:}" ]]; then
+    read -r OLD_COIN_ID OLD_RPCPORT OLD_PROGRAM OLD_MASTER_WALLET <<<"${LBC_ROW}"
+    if [[ "${OLD_RPCPORT}" == "14390" || "${OLD_PROGRAM}" == "lbrycrdd" ]]; then
       IMMATURE_BLOCKS="$(mysql_root -N -e "SELECT COUNT(*) FROM ${DB_NAME}.blocks WHERE coin_id=${OLD_COIN_ID} AND category IN ('new','immature')")"
       PENDING_BALANCE="$(mysql_root -N -e "SELECT IFNULL(ROUND(SUM(balance),8),0) FROM ${DB_NAME}.accounts WHERE coinid=${OLD_COIN_ID}")"
       output "WARNING: this upgrade moves the pool from the lbrycrdd wallet to a new lbcwallet wallet."
@@ -492,6 +519,17 @@ if [[ -z "${SECRETS[MYSQL_STRATUMPASSWD]:-}" ]] && sudo test -f "${STRATUM_DIR}/
   [[ -n "${old_mp}" && "${old_mp}" != "patofpaq" ]] && SECRETS[MYSQL_STRATUMPASSWD]="${old_mp}"
 fi
 
+# If a wallet passphrase was passed via CLI (-p / --wallet-passphrase) or LBC_WALLET_PASS env,
+# it overrides any cached or discovered passphrase.
+if [[ -n "${CLI_WALLET_PASS}" ]]; then
+  SECRETS[LBC_WALLET_PASS]="${CLI_WALLET_PASS}"
+fi
+# If an existing wallet.db was discovered without a passphrase configured anywhere,
+# default to lbcwallet's built-in default ("passphrase") rather than a random string.
+if [[ -z "${SECRETS[LBC_WALLET_PASS]:-}" ]] && [[ -n "$(sudo find "${LBCWALLET_APPDATA}" -name wallet.db -print -quit 2>/dev/null)" ]]; then
+  SECRETS[LBC_WALLET_PASS]="passphrase"
+fi
+
 for key in LBC_RPCUSER LBC_RPCPASS LBC_WALLET_PASS STRATUM_PASSWORD MYSQL_PANELPASSWD MYSQL_STRATUMPASSWD; do
   [[ -n "${SECRETS[${key}]:-}" ]] || SECRETS[${key}]="$(gen_secret)"
 done
@@ -567,8 +605,9 @@ install_lbry_release() {
 }
 INSTALLED_VERSIONS=()
 # Pool processes run in tmux sessions (pool-start.sh), never as systemd services.
-# Remove units left behind by an earlier installer version, stopping them gracefully.
-for unit in lbc-blocknotify lbc-stratum yiimp-main yiimp-loop2 yiimp-blocks lbcwallet lbcd; do
+# Remove only non-chain systemd units left behind by an earlier installer version;
+# never stop a running lbcd or lbcwallet during install (lbcd can take 30+ min to reload).
+for unit in lbc-blocknotify lbc-stratum yiimp-main yiimp-loop2 yiimp-blocks; do
   if [[ -f "/etc/systemd/system/${unit}.service" ]]; then
     output "Removing legacy systemd unit ${unit}.service"
     sudo systemctl disable --now "${unit}.service" || true
@@ -576,9 +615,11 @@ for unit in lbc-blocknotify lbc-stratum yiimp-main yiimp-loop2 yiimp-blocks lbcw
   fi
 done
 sudo systemctl daemon-reload
-# Stop running pool processes before replacing their binaries (re-run/upgrade)
-if [[ -x "${HOME}/pool-stop.sh" ]] && sudo tmux ls &>/dev/null; then
-  sudo "${HOME}/pool-stop.sh" all || displayErr "Pool processes did not stop cleanly; check 'sudo tmux ls' and re-run."
+if pgrep -x lbcd >/dev/null; then
+  output "lbcd is already running; keeping it running."
+fi
+if pgrep -x lbcwallet >/dev/null; then
+  output "lbcwallet is already running; keeping it running."
 fi
 install_lbry_release lbryio/lbcd lbcd "${LBCD_VERSION:-latest}" lbcd lbcctl
 install_lbry_release lbryio/lbcwallet lbcwallet "${LBCWALLET_VERSION:-latest}" lbcwallet
@@ -623,9 +664,10 @@ fi
 # lbcwallet: uses the same credentials for its own RPC server and for lbcd;
 # stratum and the web backend talk to lbcwallet, which proxies chain RPCs to lbcd.
 WALLET_OWNER="$(sudo stat -c '%U' "${LBCWALLET_APPDATA}" 2>/dev/null || echo lbc)"
-backup_file "${LBCWALLET_CONF_PATH}"
-sudo install -d -m 0750 "$(dirname "${LBCWALLET_CONF_PATH}")"
-sudo tee "${LBCWALLET_CONF_PATH}" >/dev/null <<EOF
+if ! pgrep -x lbcwallet >/dev/null || ! sudo test -f "${LBCWALLET_CONF_PATH}" || [[ -n "${CLI_WALLET_PASS}" ]]; then
+  backup_file "${LBCWALLET_CONF_PATH}"
+  sudo install -d -m 0750 "$(dirname "${LBCWALLET_CONF_PATH}")"
+  sudo tee "${LBCWALLET_CONF_PATH}" >/dev/null <<EOF
 [Application Options]
 rpcuser=${SECRETS[LBC_RPCUSER]}
 rpcpass=${SECRETS[LBC_RPCPASS]}
@@ -635,12 +677,15 @@ rpclisten=${LBCWALLET_RPC}
 noservertls=1
 passphrase=${SECRETS[LBC_WALLET_PASS]}
 EOF
-sudo chown "${WALLET_OWNER}:${WALLET_OWNER}" "${LBCWALLET_CONF_PATH}" 2>/dev/null || true
-sudo chmod 0600 "${LBCWALLET_CONF_PATH}"
+  sudo chown "${WALLET_OWNER}:${WALLET_OWNER}" "${LBCWALLET_CONF_PATH}" 2>/dev/null || true
+  sudo chmod 0600 "${LBCWALLET_CONF_PATH}"
+else
+  output "Keeping existing ${LBCWALLET_CONF_PATH} (lbcwallet is already running)."
+fi
 
 # Create the pool wallet once; the seed is written to SEED_FILE for the operator to back up
 wallet_exists() { [[ -n "$(sudo find "${LBCWALLET_APPDATA}" -name wallet.db -print -quit 2>/dev/null)" ]]; }
-if ! wallet_exists; then
+if ! pgrep -x lbcwallet >/dev/null && ! wallet_exists; then
   output "Creating the pool wallet"
   CREATE_OUT="$(mktemp)"
   # shellcheck disable=SC2024 # output file is intentionally owned by the installing user
@@ -748,10 +793,12 @@ output "Configuring pool processes"
 output ""
 
 sudo install -d -m 0750 -o root -g lbc "${POOL_ETC}"
-# Sourced by pool-start.sh for blocknotify-dcr; STRATUM_PASSWORD is inherited by the blocknotify child process
+# Sourced by pool-start.sh for blocknotify-dcr and lbcwallet unlocking;
+# STRATUM_PASSWORD is inherited by the blocknotify child process
 sudo tee "${POOL_ETC}/blocknotify.env" >/dev/null <<EOF
 LBCD_RPCUSER=${SECRETS[LBC_RPCUSER]}
 LBCD_RPCPASS=${SECRETS[LBC_RPCPASS]}
+LBC_WALLET_PASS=${SECRETS[LBC_WALLET_PASS]}
 STRATUM_PASSWORD=${SECRETS[STRATUM_PASSWORD]}
 EOF
 # lbcctl config used by pool-start.sh to wait for lbcd's RPC
@@ -783,40 +830,53 @@ sudo chmod 0640 "${POOL_ETC}/blocknotify.env" "${POOL_ETC}/lbcctl.conf" "${POOL_
 install -m 0755 "${POOL_SRC}/bin/pool-start.sh" "${HOME}/pool-start.sh"
 install -m 0755 "${POOL_SRC}/bin/pool-stop.sh" "${HOME}/pool-stop.sh"
 
-# lbcd + lbcwallet are needed now to get the pool wallet address
+# lbcd + lbcwallet are needed now to get the pool wallet address;
+# if they are already running, pool-start.sh leaves them untouched and continues immediately.
 sudo "${HOME}/pool-start.sh" chain
 
 # Pool wallet address (Base58 legacy; stratum needs a b.../r... address when
-# lbcwallet does not return witness_version/witness_program in validateaddress)
+# lbcwallet does not return witness_version/witness_program in validateaddress).
+# Do not block the installer if lbcd/lbcwallet are still loading (can take 30+ min).
 MASTER_WALLET="$(mysql_root -N -e "SELECT IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" || true)"
-if [[ -n "${MASTER_WALLET}" ]]; then
-  # An existing address (e.g. from the old lbrycrdd wallet) is only kept if lbcwallet owns it;
-  # stratum refuses to mine to a pool address that is not "ismine".
-  ISMINE=""
-  for _ in $(seq 1 30); do
-    ISMINE="$(lbcctl_wallet validateaddress "${MASTER_WALLET}" 2>/dev/null | jq -r '.ismine // false' 2>/dev/null || true)"
-    [[ -n "${ISMINE}" ]] && break
-    sleep 2
-  done
-  if [[ "${ISMINE}" == "true" ]]; then
-    output "Keeping pool wallet address ${MASTER_WALLET} (owned by lbcwallet)"
-  elif [[ "${ISMINE}" == "false" ]]; then
-    output "Pool wallet address ${MASTER_WALLET} is not owned by lbcwallet, replacing it"
-    UPGRADE_NOTES+=("Pool wallet address changed: ${MASTER_WALLET} (not in lbcwallet) was replaced.")
-    MASTER_WALLET=""
-  else
-    output "WARNING: lbcwallet did not answer validateaddress; keeping ${MASTER_WALLET}. Check it with: lbcctl --wallet validateaddress ${MASTER_WALLET}"
+WALLET_RPC_READY=0
+for _ in $(seq 1 5); do
+  if lbcctl_wallet getinfo >/dev/null 2>&1; then
+    WALLET_RPC_READY=1
+    break
   fi
-fi
-if [[ -z "${MASTER_WALLET}" ]]; then
-  output "Requesting a pool wallet address from lbcwallet"
-  for _ in $(seq 1 30); do
+  sleep 1
+done
+
+if [[ "${WALLET_RPC_READY}" == 1 ]]; then
+  # Ensure the wallet is unlocked (in case lbcwallet was already running locked)
+  if [[ -n "${SECRETS[LBC_WALLET_PASS]:-}" ]]; then
+    lbcctl_wallet walletpassphrase "${SECRETS[LBC_WALLET_PASS]}" 315360000 >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${MASTER_WALLET}" ]]; then
+    # An existing address (e.g. from the old lbrycrdd wallet) is only kept if lbcwallet owns it;
+    # stratum refuses to mine to a pool address that is not "ismine".
+    ISMINE="$(lbcctl_wallet validateaddress "${MASTER_WALLET}" 2>/dev/null | jq -r '.ismine // empty' 2>/dev/null || true)"
+    if [[ "${ISMINE}" == "true" ]]; then
+      output "Keeping pool wallet address ${MASTER_WALLET} (owned by lbcwallet)"
+    elif [[ "${ISMINE}" == "false" ]]; then
+      output "Pool wallet address ${MASTER_WALLET} is not owned by lbcwallet, replacing it"
+      UPGRADE_NOTES+=("Pool wallet address changed: ${MASTER_WALLET} (not in lbcwallet) was replaced.")
+      MASTER_WALLET=""
+    fi
+  fi
+  if [[ -z "${MASTER_WALLET}" ]]; then
+    output "Requesting a pool wallet address from lbcwallet"
     MASTER_WALLET="$(lbcctl_wallet getnewaddress default legacy 2>/dev/null || true)"
-    [[ "${MASTER_WALLET}" =~ ^[br][1-9A-HJ-NP-Za-km-z]{25,40}$ ]] && break
-    MASTER_WALLET=""
-    sleep 2
-  done
-  [[ -n "${MASTER_WALLET}" ]] || output "WARNING: could not get a wallet address; set coins.master_wallet for LBC in the admin panel"
+    [[ "${MASTER_WALLET}" =~ ^[br][1-9A-HJ-NP-Za-km-z]{25,40}$ ]] || MASTER_WALLET=""
+    [[ -n "${MASTER_WALLET}" ]] || output "WARNING: could not get a wallet address; set coins.master_wallet for LBC in the admin panel"
+  fi
+else
+  output "lbcwallet RPC is not ready yet (lbcd may still be starting or syncing); continuing without waiting."
+  if [[ -n "${MASTER_WALLET}" ]]; then
+    output "Keeping existing master_wallet ${MASTER_WALLET} in database."
+  else
+    output "Once lbcd and lbcwallet finish starting, set coins.master_wallet (or re-run ./install.sh)."
+  fi
 fi
 
 # LBC coin row: stratum/web talk to lbcwallet, which proxies chain RPCs to lbcd.
