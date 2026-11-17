@@ -10,7 +10,7 @@
 #   stratum server and the lbcd WebSocket block notifier (blocknotify-dcr).
 #
 # Usage:
-#   Run from a checkout of this repository as a regular user with sudo rights:
+#   Run from a checkout of this repository as root or a regular user with sudo rights:
 #     ./install.sh
 #   (If run outside a checkout, POOL_REPO / POOL_BRANCH are cloned instead.)
 #
@@ -102,8 +102,9 @@ clear
 output "LBRY Pool Installer"
 output ""
 
-[[ ${EUID} -eq 0 ]] && displayErr "Run this script as a regular user with sudo rights, not as root."
-sudo -v || displayErr "This user needs sudo rights."
+if [[ ${EUID} -ne 0 ]]; then
+  sudo -v || displayErr "This user needs sudo rights (or run the script as root)."
+fi
 
 # shellcheck source=/dev/null
 . /etc/os-release

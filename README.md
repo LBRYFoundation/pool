@@ -19,14 +19,11 @@ newest releases: distribution PHP 8.x, MariaDB, Nginx, the latest Go toolchain
 (checksum-verified against the release `checksums.txt`).
 
 TO INSTALL:
-1. Log in to your server
-2. Create new user - `sudo adduser (username)`
-3. Add user to sudo group - `sudo adduser (username) sudo`
-4. Log in to new user - `sudo su - (username)`
-5. `git clone https://github.com/LBRYFoundation/pool.git && cd pool`
+1. Log in to your server (as `root` or a user with `sudo` rights)
+2. `git clone https://github.com/LBRYFoundation/pool.git && cd pool`
    (add `--branch <branch>` to test a branch)
-6. `./install.sh`
-7. Follow the instructions on the screen.
+3. `./install.sh`
+4. Follow the instructions on the screen.
 
 Optional environment overrides (e.g. `PHP_VERSION=8.4 ./install.sh`):
 
