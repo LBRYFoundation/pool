@@ -621,7 +621,7 @@ function yaamp_pool_rate_pow($algo=null)
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate_pow-$algo",
 		"SELECT sum(shares.difficulty) * $target / $interval / 1000 FROM shares, coins
 			WHERE shares.valid AND shares.time>$delay AND shares.algo=:algo AND
-			shares.coinid=coins.id AND coins.rpcencoding='POW'", array(':algo'=>$algo));
+			shares.coinid=coins.id AND coins.rpcencoding IN ('POW','LBC')", array(':algo'=>$algo));
 
 	return $rate;
 }

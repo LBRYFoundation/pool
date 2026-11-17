@@ -49,6 +49,16 @@ is_yes() { [[ "${1,,}" =~ ^(y|yes)$ ]]; }
 # empty answer counts as yes
 is_yes_default() { [[ -z "$1" ]] || is_yes "$1"; }
 
+# Keep a copy of a config file before it is regenerated (upgrades / re-runs)
+BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
+BACKED_UP=()
+backup_file() {
+  if sudo test -f "$1"; then
+    sudo cp -a "$1" "$1.bak-${BACKUP_STAMP}"
+    BACKED_UP+=("$1.bak-${BACKUP_STAMP}")
+  fi
+}
+
 ################################################################################
 # Constants
 ################################################################################
@@ -121,6 +131,30 @@ declare -A CONFMAP=()
 if [[ -f "${CONF_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${CONF_FILE}"
+elif [[ -f "${HOME}/install.conf" && "${HOME}/install.conf" != "${CONF_FILE}" ]]; then
+  # The original installer kept its answers next to itself, usually ~/install.conf (same keys)
+  output "Using the answers of the previous install from ${HOME}/install.conf"
+  # shellcheck source=/dev/null
+  source "${HOME}/install.conf"
+fi
+
+# Upgrade of an existing pool (original installer or an earlier run of this one)
+UPGRADE=0
+if [[ -d "${WEB_DIR}/yaamp" || -x "${STRATUM_DIR}/stratum" ]]; then
+  UPGRADE=1
+  output "Existing pool installation found: running as an upgrade."
+  output ""
+  # The original installer renamed actionAdminRights() in the deployed SiteController.php;
+  # recover that route as the default answer if it is not known yet.
+  if [[ -z "${CONFMAP['ADMIN_PANEL']:-}" && -f "${WEB_DIR}/yaamp/modules/site/SiteController.php" ]]; then
+    OLD_ACTIONS="$(grep -oP 'public function action\K[A-Za-z0-9]+' "${WEB_DIR}/yaamp/modules/site/SiteController.php" | sort -u || true)"
+    NEW_ACTIONS="$(grep -oP 'public function action\K[A-Za-z0-9]+' "${SCRIPT_DIR}/web/yaamp/modules/site/SiteController.php" 2>/dev/null | sort -u || true)"
+    ADMIN_CANDIDATES="$(comm -23 <(echo "${OLD_ACTIONS}") <(echo "${NEW_ACTIONS}") | grep . || true)"
+    if [[ -n "${ADMIN_CANDIDATES}" && "$(wc -l <<<"${ADMIN_CANDIDATES}")" -eq 1 ]]; then
+      CONFMAP['ADMIN_PANEL']="${ADMIN_CANDIDATES}"
+      output "Detected the existing admin panel path: /site/${CONFMAP['ADMIN_PANEL']}"
+    fi
+  fi
 fi
 # Ask user to enter/change configuration data
 read -e -r -p "Enter time zone (e.g. America/New_York): " -i "${CONFMAP['TIME_ZONE']:-UTC}" CONFMAP['TIME_ZONE']
@@ -151,6 +185,30 @@ chmod 600 "${CONF_FILE}"
 SERVER_NAME="${CONFMAP['SERVER_NAME']}"
 SERVER_NAMES="${SERVER_NAME}"
 is_yes "${CONFMAP['SUB_DOMAIN']}" || SERVER_NAMES+=" www.${SERVER_NAME}"
+
+# Wallet cutover check: the original pool paid out of the lbrycrdd wallet, whose
+# funds and coinbase transactions are not visible to the new lbcwallet.
+UPGRADE_NOTES=()
+if [[ ${UPGRADE} -eq 1 ]] && command -v mysql &>/dev/null; then
+  LBC_ROW="$(sudo mysql -N -e "SELECT id, IFNULL(rpcport,0), IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
+  if [[ -n "${LBC_ROW}" ]]; then
+    read -r OLD_COIN_ID OLD_RPCPORT OLD_MASTER_WALLET <<<"${LBC_ROW}"
+    if [[ "${OLD_RPCPORT}" != "${LBCWALLET_RPC##*:}" ]]; then
+      IMMATURE_BLOCKS="$(sudo mysql -N -e "SELECT COUNT(*) FROM ${DB_NAME}.blocks WHERE coin_id=${OLD_COIN_ID} AND category IN ('new','immature')")"
+      PENDING_BALANCE="$(sudo mysql -N -e "SELECT IFNULL(ROUND(SUM(balance),8),0) FROM ${DB_NAME}.accounts WHERE coinid=${OLD_COIN_ID}")"
+      output "WARNING: this upgrade moves the pool from the lbrycrdd wallet to a new lbcwallet wallet."
+      output "  Old pool wallet address:            ${OLD_MASTER_WALLET:-<none>}"
+      output "  Blocks still new/immature:          ${IMMATURE_BLOCKS}"
+      output "  Unpaid miner balances (LBC):        ${PENDING_BALANCE}"
+      output "  - Immature blocks were mined to the old wallet; lbcwallet cannot confirm them, so they"
+      output "    would be marked orphan after 7 days and their earnings dropped. Let them mature first."
+      output "  - Payouts come from the new wallet: fund it from the old lbrycrdd wallet afterwards."
+      read -r -p "Continue with the wallet cutover? [y/N] : " ANSWER
+      is_yes "${ANSWER}" || displayErr "Aborted. Let the immature blocks mature (stop stratum ~100 blocks before the cutover), then re-run."
+      UPGRADE_NOTES+=("Wallet cutover from lbrycrdd: old address ${OLD_MASTER_WALLET:-<none>}, ${IMMATURE_BLOCKS} immature block(s), ${PENDING_BALANCE} LBC unpaid balances at upgrade time. Fund the new pool wallet from the old lbrycrdd wallet before payouts run.")
+    fi
+  fi
+fi
 
 # Generated secrets are kept so re-running the installer does not break a running pool
 declare -A SECRETS=()
@@ -190,11 +248,20 @@ if [[ -n "${PHP_VERSION:-}" ]]; then
   sudo -E add-apt-repository -y ppa:ondrej/php
   sudo -E apt-get update
   sudo -E apt-get install -y "${PHP_EXTENSIONS[@]/#/php${PHP_VERSION}-}"
+  PHP_BIN="/usr/bin/php${PHP_VERSION}"
 else
   output "Installing the distribution PHP 8.x packages"
   sudo -E apt-get install -y "${PHP_EXTENSIONS[@]/#/php-}"
+  # newest PHP 8 CLI now installed (the php-* metapackages follow the default version)
+  PHP_BIN="$(find /usr/bin -maxdepth 1 -regex '/usr/bin/php8\.[0-9]+' | sort -V | tail -1)"
 fi
-PHP_VER="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+[[ -n "${PHP_BIN}" && -x "${PHP_BIN}" ]] || displayErr "PHP 8.x CLI not found after installing the PHP packages."
+# Upgraded servers may still have PHP 7.x selected as `php` (web loops and console use `php`)
+if [[ "$(readlink -f "$(command -v php)")" != "$(readlink -f "${PHP_BIN}")" ]]; then
+  output "Selecting ${PHP_BIN} as the default php CLI"
+  sudo update-alternatives --set php "${PHP_BIN}"
+fi
+PHP_VER="${PHP_BIN#/usr/bin/php}"
 [[ "${PHP_VER%%.*}" -ge 8 ]] || displayErr "PHP 8.x is required, found PHP ${PHP_VER}."
 PHP_FPM_SOCK="/run/php/php${PHP_VER}-fpm.sock"
 output "Using PHP ${PHP_VER}"
@@ -448,6 +515,7 @@ FLUSH PRIVILEGES;
 EOF
 
 # Client config: `mysql --defaults-group-suffix=host1` (panel) / host2 (stratum)
+backup_file "${HOME}/.my.cnf"
 (umask 077 && cat >"${HOME}/.my.cnf" <<EOF
 [clienthost1]
 user=panel
@@ -523,6 +591,25 @@ sudo "${HOME}/pool-start.sh" chain
 # Pool wallet address (Base58 legacy; stratum needs a b.../r... address when
 # lbcwallet does not return witness_version/witness_program in validateaddress)
 MASTER_WALLET="$(sudo mysql -N -e "SELECT IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" || true)"
+if [[ -n "${MASTER_WALLET}" ]]; then
+  # An existing address (e.g. from the old lbrycrdd wallet) is only kept if lbcwallet owns it;
+  # stratum refuses to mine to a pool address that is not "ismine".
+  ISMINE=""
+  for _ in $(seq 1 30); do
+    ISMINE="$(lbcctl_wallet validateaddress "${MASTER_WALLET}" 2>/dev/null | jq -r '.ismine // false' 2>/dev/null || true)"
+    [[ -n "${ISMINE}" ]] && break
+    sleep 2
+  done
+  if [[ "${ISMINE}" == "true" ]]; then
+    output "Keeping pool wallet address ${MASTER_WALLET} (owned by lbcwallet)"
+  elif [[ "${ISMINE}" == "false" ]]; then
+    output "Pool wallet address ${MASTER_WALLET} is not owned by lbcwallet, replacing it"
+    UPGRADE_NOTES+=("Pool wallet address changed: ${MASTER_WALLET} (not in lbcwallet) was replaced.")
+    MASTER_WALLET=""
+  else
+    output "WARNING: lbcwallet did not answer validateaddress; keeping ${MASTER_WALLET}. Check it with: lbcctl --wallet validateaddress ${MASTER_WALLET}"
+  fi
+fi
 if [[ -z "${MASTER_WALLET}" ]]; then
   output "Requesting a pool wallet address from lbcwallet"
   for _ in $(seq 1 30); do
@@ -534,7 +621,8 @@ if [[ -z "${MASTER_WALLET}" ]]; then
   [[ -n "${MASTER_WALLET}" ]] || output "WARNING: could not get a wallet address; set coins.master_wallet for LBC in the admin panel"
 fi
 
-# LBC coin row: stratum/web talk to lbcwallet, which proxies chain RPCs to lbcd
+# LBC coin row: stratum/web talk to lbcwallet, which proxies chain RPCs to lbcd.
+# On upgrades the existing row (lbrycrdd on port 14390) is repointed to lbcwallet.
 sudo mysql "${DB_NAME}" <<EOF
 INSERT INTO coins (name, symbol, algo, image, enable, auto_ready, visible, installed,
   rpchost, rpcport, rpcuser, rpcpasswd, rpcencoding, rpccurl, rpcssl, account,
@@ -547,7 +635,9 @@ SELECT 'LBRY Credits', 'LBC', 'lbry', '/images/coin-LBRY.png', 1, 1, 1, 1,
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM coins WHERE symbol='LBC');
 UPDATE coins SET algo='lbry', rpchost='127.0.0.1', rpcport=${LBCWALLET_RPC##*:},
   rpcuser='${SECRETS[LBC_RPCUSER]}', rpcpasswd='${SECRETS[LBC_RPCPASS]}',
-  rpcencoding='LBC', rpccurl=0, rpcssl=0, installed=1
+  rpcencoding='LBC', rpccurl=0, rpcssl=0, rpccert=NULL, installed=1, hasgetinfo=1,
+  account=IF(IFNULL(account,'')='', 'default', account),
+  conf_folder='${LBCWALLET_DIR}', program='lbcwallet'
   WHERE symbol='LBC';
 UPDATE coins SET master_wallet='${MASTER_WALLET}' WHERE symbol='LBC' AND '${MASTER_WALLET}' <> '';
 EOF
@@ -555,7 +645,18 @@ COIN_ID="$(sudo mysql -N -e "SELECT id FROM ${DB_NAME}.coins WHERE symbol='LBC' 
 [[ -n "${COIN_ID}" ]] || displayErr "Could not create the LBC coin record."
 echo "COIN_ID=${COIN_ID}" | sudo tee "${POOL_ETC}/pool.env" >/dev/null
 
-# Stratum config (written in full; the old sed edits did not match config.sample)
+# Stratum config (written in full; the old sed edits did not match config.sample).
+# Tuned values of an existing config are carried over.
+ini_value() { sudo awk -F '=' -v k="$2" '{ gsub(/[ \t\r]/, "", $1); gsub(/^[ \t]+|[ \t\r]+$/, "", $2) } $1 == k { print $2; exit }' "$1" 2>/dev/null || true; }
+STRATUM_DIFF=128
+STRATUM_MAX_TTF=40000000
+if sudo test -f "${STRATUM_DIR}/config/lbry.conf"; then
+  OLD_VALUE="$(ini_value "${STRATUM_DIR}/config/lbry.conf" difficulty)"
+  [[ "${OLD_VALUE}" =~ ^[0-9]+(\.[0-9]+)?$ ]] && STRATUM_DIFF="${OLD_VALUE}"
+  OLD_VALUE="$(ini_value "${STRATUM_DIR}/config/lbry.conf" max_ttf)"
+  [[ "${OLD_VALUE}" =~ ^[0-9]+$ ]] && STRATUM_MAX_TTF="${OLD_VALUE}"
+fi
+backup_file "${STRATUM_DIR}/config/lbry.conf"
 sudo tee "${STRATUM_DIR}/config/lbry.conf" >/dev/null <<EOF
 [TCP]
 server = ${SERVER_NAME}
@@ -571,8 +672,8 @@ port = 3306
 
 [STRATUM]
 algo = lbry
-difficulty = 128
-max_ttf = 40000000
+difficulty = ${STRATUM_DIFF}
+max_ttf = ${STRATUM_MAX_TTF}
 coinbase_sig = ${CONFMAP['COINBASE_SIG']}
 EOF
 sudo chmod 0640 "${STRATUM_DIR}/config/lbry.conf"
@@ -584,8 +685,10 @@ output "Making Web Server Magic Happen!"
 output ""
 
 sudo install -d -m 0755 "${WEB_DIR}"
+# images/ is protected from deletion: the backend downloads coin images into it
 sudo rsync -a --delete \
   --exclude 'serverconfig.php' --exclude 'yaamp/runtime/***' --exclude 'assets/***' \
+  --filter 'P images/***' \
   "${POOL_SRC}/web/" "${WEB_DIR}/"
 sudo install -d "${WEB_DIR}/yaamp/runtime" "${WEB_DIR}/assets"
 # custom admin entrance (applied to the deployed copy, not the git checkout)
@@ -595,6 +698,44 @@ sudo install -d /var/yiimp
 sudo ln -sfn "${WEB_DIR}" /var/yiimp/web
 
 sudo install -d -o www-data -g www-data -m 0750 "${YIIMP_LOG_DIR}" "${BACKUP_DIR}"
+
+# Operator settings (as PHP literals); values from an existing serverconfig.php win
+declare -A WEBCFG=(
+  [YAAMP_SITE_NAME]="'LBRY Pool'" [YAAMP_STRATUM_URL]="YAAMP_SITE_URL"
+  [YAAMP_FEES_MINING]="0.5" [YAAMP_PAYMENTS_FREQ]="3*60*60" [YAAMP_PAYMENTS_MINI]="0.001"
+  [YIIMP_PUBLIC_EXPLORER]="true" [YIIMP_PUBLIC_BENCHMARK]="false" [YIIMP_FIAT_ALTERNATIVE]="'USD'"
+  [cold_wallet_table]="array()" [configFixedPoolFees]="array()"
+  [configCustomPorts]="array()" [configAlgoNormCoef]="array()"
+)
+if sudo test -f "${WEB_DIR}/serverconfig.php"; then
+  output "Carrying over settings from the existing serverconfig.php"
+  backup_file "${WEB_DIR}/serverconfig.php"
+  READ_CFG="$(mktemp --suffix=.php)"
+  cat >"${READ_CFG}" <<'PHP'
+<?php
+// usage: php read.php <serverconfig.php> <name>... -> "name<TAB>php literal" per line
+ob_start();
+try { include $argv[1]; } catch (Throwable $e) { }
+ob_end_clean();
+foreach (array_slice($argv, 2) as $name) {
+	if (defined($name)) {
+		$value = constant($name);
+		// keep the YAAMP_SITE_URL expression unless the stratum host differs
+		if ($name === 'YAAMP_STRATUM_URL' && defined('YAAMP_SITE_URL') && $value === YAAMP_SITE_URL) continue;
+	} elseif (isset($GLOBALS[$name]) && is_array($GLOBALS[$name])) {
+		$value = $GLOBALS[$name];
+	} else {
+		continue;
+	}
+	echo $name, "\t", str_replace(array("\r", "\n", "\t"), ' ', var_export($value, true)), "\n";
+}
+PHP
+  chmod 0644 "${READ_CFG}"
+  while IFS=$'\t' read -r key value; do
+    [[ -n "${key}" && -n "${value}" && -n "${WEBCFG[${key}]+x}" ]] && WEBCFG[${key}]="${value}"
+  done < <(sudo php -d display_errors=0 -d error_reporting=0 "${READ_CFG}" "${WEB_DIR}/serverconfig.php" "${!WEBCFG[@]}" || true)
+  rm -f "${READ_CFG}"
+fi
 
 # Only pool settings here; everything else falls back to yaamp/defaultconfig.php
 sudo tee "${WEB_DIR}/serverconfig.php" >/dev/null <<EOF
@@ -619,17 +760,17 @@ define('YAAMP_ALLOW_EXCHANGE', false);
 define('YAAMP_USE_NICEHASH_API', false);
 define('YAAMP_LIMIT_ESTIMATE', false);
 
-define('YAAMP_FEES_MINING', 0.5);
-define('YAAMP_PAYMENTS_FREQ', 3*60*60);
-define('YAAMP_PAYMENTS_MINI', 0.001);
+define('YAAMP_FEES_MINING', ${WEBCFG[YAAMP_FEES_MINING]});
+define('YAAMP_PAYMENTS_FREQ', ${WEBCFG[YAAMP_PAYMENTS_FREQ]});
+define('YAAMP_PAYMENTS_MINI', ${WEBCFG[YAAMP_PAYMENTS_MINI]});
 
-define('YIIMP_PUBLIC_EXPLORER', true);
-define('YIIMP_PUBLIC_BENCHMARK', false);
-define('YIIMP_FIAT_ALTERNATIVE', 'USD');
+define('YIIMP_PUBLIC_EXPLORER', ${WEBCFG[YIIMP_PUBLIC_EXPLORER]});
+define('YIIMP_PUBLIC_BENCHMARK', ${WEBCFG[YIIMP_PUBLIC_BENCHMARK]});
+define('YIIMP_FIAT_ALTERNATIVE', ${WEBCFG[YIIMP_FIAT_ALTERNATIVE]});
 
 define('YAAMP_SITE_URL', '${SERVER_NAME}');
-define('YAAMP_STRATUM_URL', YAAMP_SITE_URL); // change if your stratum server is on a different host
-define('YAAMP_SITE_NAME', 'LBRY Pool');
+define('YAAMP_STRATUM_URL', ${WEBCFG[YAAMP_STRATUM_URL]}); // change if your stratum server is on a different host
+define('YAAMP_SITE_NAME', ${WEBCFG[YAAMP_SITE_NAME]});
 define('YAAMP_ADMIN_EMAIL', '${CONFMAP['EMAIL']}');
 define('YAAMP_ADMIN_IP', '${CONFMAP['PUBLIC_IP']}'); // samples: "80.236.118.26,90.234.221.11" or "10.0.0.1/8"
 define('YAAMP_ADMIN_WEBCONSOLE', true);
@@ -638,14 +779,17 @@ define('YAAMP_CREATE_NEW_COINS', false);
 define('YAAMP_DEFAULT_ALGO', 'lbry');
 define('YAAMP_USE_NGINX', true);
 
-\$cold_wallet_table = array();
-\$configFixedPoolFees = array();
-\$configCustomPorts = array();
-\$configAlgoNormCoef = array();
+\$cold_wallet_table = ${WEBCFG[cold_wallet_table]};
+\$configFixedPoolFees = ${WEBCFG[configFixedPoolFees]};
+\$configCustomPorts = ${WEBCFG[configCustomPorts]};
+\$configAlgoNormCoef = ${WEBCFG[configAlgoNormCoef]};
 EOF
+sudo php -l "${WEB_DIR}/serverconfig.php" >/dev/null ||
+  displayErr "Generated ${WEB_DIR}/serverconfig.php is invalid; the previous one is in ${WEB_DIR}/serverconfig.php.bak-${BACKUP_STAMP}"
 
 # mysqldump credentials for the web backup job
 sudo install -d -m 0755 /etc/yiimp
+backup_file /etc/yiimp/keys.php
 sudo tee /etc/yiimp/keys.php >/dev/null <<EOF
 <?php
 /* Generated by install.sh, read by the web backend (backups) */
@@ -760,6 +904,7 @@ EOF
   sudo systemctl reload nginx
 }
 
+backup_file "/etc/nginx/sites-available/${SERVER_NAME}.conf"
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo systemctl enable --now nginx
 if [[ -f "/etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem" ]]; then
@@ -787,7 +932,8 @@ sudo systemctl reload "php${PHP_VER}-fpm"
 # Only lbcd + lbcwallet are running now (started for the wallet address); the rest
 # is started by the operator with ~/pool-start.sh. Nothing restarts automatically.
 
-(umask 077 && cat >"${CREDENTIALS_FILE}" <<EOF
+(umask 077 && {
+cat <<EOF
 LBRY pool install summary ($(date))
 
 Admin panel:      http://${SERVER_NAME}/site/${CONFMAP['ADMIN_PANEL']}  (allowed IPs: ${CONFMAP['PUBLIC_IP']})
@@ -815,7 +961,15 @@ Logs:             ${STRATUM_DIR}/config/*.log, ${YIIMP_LOG_DIR}/debug.log, ${LBC
 Chain sync:       lbcctl getblockchaininfo   (stratum mines once lbcd is synced)
 Wallet balance:   lbcctl --wallet getbalance
 EOF
-)
+  if [[ ${UPGRADE} -eq 1 ]]; then
+    echo
+    echo "Upgrade notes:"
+    for note in "${UPGRADE_NOTES[@]}"; do echo "  - ${note}"; done
+    echo "  - Previous config files were kept as:"
+    for f in "${BACKED_UP[@]}"; do echo "      ${f}"; done
+    echo "  - The legacy lbrycrdd data (~/.lbrycrd) and binaries were left untouched."
+  fi
+} >"${CREDENTIALS_FILE}")
 
 clear
 output "LBRY pool installation complete."
@@ -823,6 +977,12 @@ output ""
 output "Summary and credentials: ${CREDENTIALS_FILE}"
 output "Wallet seed (back it up offline, then delete the file): ${SEED_FILE}"
 output ""
+if [[ ${UPGRADE} -eq 1 ]]; then
+  output "Upgrade notes:"
+  for note in "${UPGRADE_NOTES[@]}"; do output "  - ${note}"; done
+  output "  - ${#BACKED_UP[@]} previous config file(s) backed up (*.bak-${BACKUP_STAMP}), see ${CREDENTIALS_FILE}"
+  output ""
+fi
 output "lbcd and lbcwallet are running in tmux (sudo tmux ls) and lbcd is syncing the chain."
 output "Check progress with: lbcctl getblockchaininfo"
 output "Start stratum, the block notifier and the web loops when ready: sudo ~/pool-start.sh"

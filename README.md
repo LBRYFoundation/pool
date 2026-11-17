@@ -40,6 +40,28 @@ Optional environment overrides (e.g. `PHP_VERSION=8.4 ./install.sh`):
 The installer can be re-run (e.g. to upgrade lbcd/lbcwallet/PHP): answers are kept
 in `install.conf` and generated passwords in `~/.lbcpool-secrets`.
 
+## Upgrading a pool installed with the original installer
+
+Stop the old processes (tmux/screen sessions, `lbrycrdd`), then run `./install.sh`
+from a checkout of this repository. The installer detects the existing install and:
+
+- reuses the answers from `~/install.conf` and pre-fills the existing custom admin path;
+- keeps the database, applies the new `sql/2026-*` migrations, and repoints the LBC
+  coin record from lbrycrdd to lbcwallet;
+- keeps the existing pool address only if the new lbcwallet owns it; otherwise it
+  requests a new one;
+- carries over operator settings from `serverconfig.php` (site name, fees, payout
+  settings, stratum URL, fee/port tables) and the stratum `difficulty`/`max_ttf`;
+- backs up every config file it rewrites as `<file>.bak-<timestamp>`;
+- switches the `php` CLI to PHP 8 if an older PHP is still selected.
+
+**Wallet cutover:** the original pool used the lbrycrdd wallet, which lbcwallet cannot
+see. Before upgrading, let found blocks mature (stop stratum ~100 blocks / ~4 hours
+before the cutover); otherwise lbcwallet cannot confirm them, and they are marked
+orphan after 7 days. After upgrading, fund the new pool wallet from the old lbrycrdd
+wallet before payouts run. The installer shows the number of immature blocks and the
+unpaid balances and asks for confirmation. `~/.lbrycrd` is left untouched.
+
 ## What gets installed
 
 | Component | Details |
