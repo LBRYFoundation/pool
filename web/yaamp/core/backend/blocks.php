@@ -422,10 +422,10 @@ function BackendUpdatePoolBalances($coinid = NULL)
 	$coins = getdbolist('db_coins', $sqlFilter);
 	foreach($coins as $coin)
 	{
-		$coin->immature = (double) dboscalar("SELECT SUM(amount) FROM blocks WHERE category='immature' AND coin_id=".intval($coin->id));
-		$coin->cleared = (double) dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid=".intval($coin->id));
-		$pending = (double) dboscalar("SELECT SUM(amount) FROM earnings WHERE status=1 AND coinid=".intval($coin->id)); // (to be cleared)
-		$coin->available = (double) $coin->balance - $coin->cleared - $pending;
+		$coin->immature = (float) dboscalar("SELECT SUM(amount) FROM blocks WHERE category='immature' AND coin_id=".intval($coin->id));
+		$coin->cleared = (float) dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid=".intval($coin->id));
+		$pending = (float) dboscalar("SELECT SUM(amount) FROM earnings WHERE status=1 AND coinid=".intval($coin->id)); // (to be cleared)
+		$coin->available = (float) $coin->balance - $coin->cleared - $pending;
 		//if ($pending) debuglog("{$coin->symbol} immature {$coin->immature}, cleared {$coin->cleared}, pending {$pending}, available {$coin->available}");
 		$coin->save();
 	}

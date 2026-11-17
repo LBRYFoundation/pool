@@ -5,7 +5,7 @@
 # Version 2.0 (November 2026)
 #
 # Program:
-#   Install the LBRY (LBC) mining pool on Ubuntu 22.04 / 24.04:
+#   Install the LBRY (LBC) mining pool on Ubuntu 22.04 / 24.04 / 26.04:
 #   Nginx, MariaDB, PHP 8.x (Yii 1.1.32), lbcd + lbcwallet, the LBC-only
 #   stratum server and the lbcd WebSocket block notifier (blocknotify-dcr).
 #
@@ -109,9 +109,9 @@ fi
 # shellcheck source=/dev/null
 . /etc/os-release
 case "${VERSION_ID:-}" in
-  22.04 | 24.04) ;;
+  22.04 | 24.04 | 26.04) ;;
   *)
-    output "WARNING: this installer targets Ubuntu 22.04/24.04, found ${PRETTY_NAME:-unknown}."
+    output "WARNING: this installer targets Ubuntu 22.04/24.04/26.04, found ${PRETTY_NAME:-unknown}."
     read -r -p "Continue anyway? [y/N] : " ANSWER
     is_yes "${ANSWER}" || exit 1
     ;;

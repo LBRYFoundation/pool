@@ -177,7 +177,7 @@ foreach ($db_rows as $row) {
 
 	// power
 	$title = ''; $class = '';
-	$power = (double) $row['power'];
+	$power = (float) $row['power'];
 
 	// Adjust the 750 Ti nvml watts
 	$factor = 1.0;
@@ -236,7 +236,7 @@ if (!empty($algo)) {
 		echo '<th>'.($avg['intensity'] ? round($avg['intensity'],1) : '').'</th>';
 		echo '<th>'.($avg['freq'] ? round($avg['freq']) : '').'</th>';
 
-		$power = (double) $avg['power'] * $factor;
+		$power = (float) $avg['power'] * $factor;
 		echo '<th>'.($power>0 ? round($power) : '').'</th>';
 
 		$hpw = ($power>0) ? $hpw = floatval($avg['khps']) / $power : 0;

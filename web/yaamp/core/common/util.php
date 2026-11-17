@@ -252,7 +252,7 @@ function file_get_contents_curl($url, $user=null)
 	curl_setopt($ch, CURLOPT_WRITEFUNCTION, $callback);
 
 	curl_exec($ch);
-	curl_close($ch);
+	unset($ch);
 
 //	debuglog(" total read $totalread, ".strlen($data));
 	return $data;
@@ -343,18 +343,25 @@ class RecursiveDOMIterator implements RecursiveIterator
 		$this->_position = 0;
 		$this->_nodeList = $domNode->childNodes;
 	}
+	#[\ReturnTypeWillChange]
 	public function getChildren() { return new self($this->current()); }
+	#[\ReturnTypeWillChange]
 	public function key()         { return $this->_position; }
+	#[\ReturnTypeWillChange]
 	public function next()        { $this->_position++; }
+	#[\ReturnTypeWillChange]
 	public function rewind()      { $this->_position = 0; }
+	#[\ReturnTypeWillChange]
 	public function valid()
 	{
 		return $this->_position < $this->_nodeList->length;
 	}
+	#[\ReturnTypeWillChange]
 	public function hasChildren()
 	{
 		return $this->current()->hasChildNodes();
 	}
+	#[\ReturnTypeWillChange]
 	public function current()
 	{
 		return $this->_nodeList->item($this->_position);

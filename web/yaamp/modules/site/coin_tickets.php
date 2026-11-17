@@ -101,7 +101,7 @@ if (!empty($txs)) {
 	// to hide truncated days sums
 	$tx = reset($txs);
 	if (count($txs) == $maxrows)
-		$lastday = strftime('%F', arraySafeVal($tx,'blocktime', $tx['time']));
+		$lastday = date('Y-m-d', arraySafeVal($tx,'blocktime', $tx['time']));
 
 	if (!empty($txs)) foreach($txs as $tx)
 	{
@@ -177,7 +177,7 @@ if (!empty($txs_array)) {
 		}
 		// for truncated day sums
 		if ($lastday == '' && count($txs) == $maxrows)
-			$lastday = strftime('%F', arraySafeVal($tx,'blocktime', $tx['time']));
+			$lastday = date('Y-m-d', arraySafeVal($tx,'blocktime', $tx['time']));
 	}
 	if ($info['version'] < 1010200)
 		ksort($txs_array);
@@ -223,7 +223,7 @@ foreach($txs_array as $tx)
 		if (in_array($tx['txid'], $voted_txs)) $category = 'voted';
 		else if (!in_array($tx['txid'], $tickets['hashes'])) $category = 'missed';
 	} else {
-		$amount = (double) arraySafeVal($tx,'amount');
+		$amount = (float) arraySafeVal($tx,'amount');
 		$stake = $amount - $stx['vout'][2]['value'];
 		if (isset($stx['vout'][3]['value'])) // with pool fees
 			$stake -= arraySafeVal($stx['vout'][3],'value');

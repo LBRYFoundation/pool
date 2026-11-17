@@ -156,7 +156,7 @@ class SiteController extends CommonController
 	{
 		if(!$this->admin) return;
 		$coin = getdbo('db_coins', getiparam('id'));
-		$spendlimit = (double) arraySafeVal($_POST, 'spendlimit');
+		$spendlimit = (float) arraySafeVal($_POST, 'spendlimit');
 		$quantity  = (int) arraySafeVal($_POST, 'quantity');
 		if ($coin && $spendlimit) {
 			$remote = new WalletRPC($coin);

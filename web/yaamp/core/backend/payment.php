@@ -73,7 +73,7 @@ function BackendCoinPayments($coin)
 					if (stripos($error,'transaction too large') !== false || stripos($error,'invalid amount') !== false
 						|| stripos($error,'insufficient funds') !== false || stripos($error,'transaction creation failed') !== false
 					) {
-						$coin->payout_max = min((double) $amount, (double) $coin->payout_max);
+						$coin->payout_max = min((float) $amount, (float) $coin->payout_max);
 						$coin->save();
 						$amount /= 2;
 						continue;

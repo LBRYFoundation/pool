@@ -67,7 +67,7 @@ function yobit_api_query2($method, $req = array())
 	{
 		$e = curl_error($ch);
 		debuglog($e);
-		curl_close($ch);
+		unset($ch);
 		return null;
 	}
 
@@ -77,7 +77,7 @@ function yobit_api_query2($method, $req = array())
 		debuglog("yobit: $method failed ($status) ".strip_data($res));
 	}
 
-	curl_close($ch);
+	unset($ch);
 
 	return $result;
 }

@@ -229,7 +229,7 @@ class ShiftCommand extends CConsoleCommand
 			return 1;
 		}
 
-		$res = $remote->sendtoaddress($deposit, (double)$amount, "", "", true);
+		$res = $remote->sendtoaddress($deposit, (float)$amount, "", "", true);
 		echo json_encode($res)."\n";
 
 	}

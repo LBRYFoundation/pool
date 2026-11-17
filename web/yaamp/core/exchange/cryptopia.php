@@ -24,7 +24,7 @@ function cryptopia_api_query($method, $params='')
 			debuglog("cryptopia: $method failed ($status) ".strip_data($res));
 	}
 
-	curl_close($ch);
+	unset($ch);
 	return $result;
 }
 
@@ -74,7 +74,7 @@ function cryptopia_api_user($method, $params=NULL)
 	{
 		$e = curl_error($ch);
 		debuglog("cryptopia: $e");
-		curl_close($ch);
+		unset($ch);
 		return false;
 	}
 
@@ -93,7 +93,7 @@ function cryptopia_api_user($method, $params=NULL)
 			debuglog("cryptopia: $method failed ($status) ".strip_data($res));
 	}
 
-	curl_close($ch);
+	unset($ch);
 
 	return $result;
 }

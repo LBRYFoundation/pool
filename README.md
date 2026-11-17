@@ -6,7 +6,7 @@ An LBC-only mining pool: the yiimp web front-end (Yii 1.1.32 on PHP 8.x), the
 [lbcwallet](https://github.com/lbryio/lbcwallet).
 
 ## Prerequisites:
-1. Ubuntu 22.04 or 24.04 (amd64 or arm64)
+1. Ubuntu 22.04, 24.04, or 26.04 (amd64 or arm64)
 2. A domain name pointed at the server (for LetsEncrypt SSL)
 3. Install Script (Provided in this repo)
 

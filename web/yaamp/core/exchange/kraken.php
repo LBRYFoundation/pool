@@ -66,7 +66,7 @@ class KrakenAPI
 
 	function __destruct()
 	{
-		curl_close($this->curl);
+		unset($this->curl);
 	}
 
 	/**
@@ -331,8 +331,8 @@ function kraken_update_market($market)
 	}
 	$ticker = $m[$pair2];
 
-	$a = (double) $ticker['a'][0];
-	$b = (double) $ticker['b'][0];
+	$a = (float) $ticker['a'][0];
+	$b = (float) $ticker['b'][0];
 	$price2 = ($a + $b) / 2;
 	$market->price2 = AverageIncrement($market->price2, $price2);
 	$market->price = AverageIncrement($market->price, $a*0.98);

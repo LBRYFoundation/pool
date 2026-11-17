@@ -223,7 +223,7 @@ class MarketCommand extends CConsoleCommand
 		$items = getdbolistWith('db_market_history', 'market', $c);
 
 		foreach ($items as $histo) {
-			$date = strftime('%F %T', $histo->time);
+			$date = date('Y-m-d H:i:s', $histo->time);
 			$price1 = bitcoinvaluetoa($histo->price);
 			$price2 = bitcoinvaluetoa($histo->price2);
 			echo "$date $price1 $price2\n";

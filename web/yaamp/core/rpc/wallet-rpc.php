@@ -84,7 +84,7 @@ class WalletRPC {
 
 					foreach ($this->accounts as $addr) {
 						// web3.fromWei(eth.getBalance("0x..."), "ether")
-						$balance = (double) $this->rpc->eth_getBalance($addr,'latest', true);
+						$balance = (float) $this->rpc->eth_getBalance($addr,'latest', true);
 						$balance /= 1e18;
 						$balances += $balance;
 						$info['accounts'][$addr] = $balance;
@@ -92,7 +92,7 @@ class WalletRPC {
 					$info['balance'] = $balances;
 					$this->height = $this->height ? $this->height : $this->rpc->eth_blockNumber();
 					$info['blocks'] = $this->height;
-					$info['gasprice'] = (double) $this->rpc->eth_gasPrice();
+					$info['gasprice'] = (float) $this->rpc->eth_gasPrice();
 					$info['gasprice'] /= 1e18;
 					$info['connections'] = $this->rpc->net_peerCount();
 					$info['version'] = $this->rpc->web3_clientVersion();
@@ -186,7 +186,7 @@ class WalletRPC {
 				unset($res["mi"]);
 				$data = $this->rpc->getlastblockheader();
 				$header = arraySafeVal($data,"block_header");
-				$res["reward"] = (double) arraySafeVal($header,"reward") / 1e12;
+				$res["reward"] = (float) arraySafeVal($header,"reward") / 1e12;
 				$this->error = $this->rpc->error;
 				break;
 			case "getnetworkinfo":
@@ -212,8 +212,8 @@ class WalletRPC {
 				$res = $this->rpc->getblocktemplate($gbt_params);
 				$data = $this->rpc->getlastblockheader();
 				$header = arraySafeVal($data,"block_header");
-				$res["coinbase"] = (double) arraySafeVal($header,"reward") / 1e4;
-				$res["reward"] = (double) arraySafeVal($header,"reward") / 1e12;
+				$res["coinbase"] = (float) arraySafeVal($header,"reward") / 1e4;
+				$res["reward"] = (float) arraySafeVal($header,"reward") / 1e12;
 				$this->error = $this->rpc->error;
 				break;
 			case "getbalance":
@@ -242,7 +242,7 @@ class WalletRPC {
 					));
 					$raw = reset(arraySafeVal($raw,'txs',array()));
 					if (!empty($raw)) {
-						$k = (double) $raw['block_height'] + ($k/1000.0);
+						$k = (float) $raw['block_height'] + ($k/1000.0);
 						unset($raw['as_hex']);
 						unset($raw['tx_hash']);
 						//$raw['json'] = json_decode($raw['as_json']);
@@ -258,7 +258,7 @@ class WalletRPC {
 				$res = isset($res['payments']) ? $res['payments'] : array();
 				foreach ($res as $k=>$tx) {
 					$tx['category'] = 'send';
-					$k = (double) $raw['block_height'] + 0.5 + ($k/1000.0); // sort key
+					$k = (float) $raw['block_height'] + 0.5 + ($k/1000.0); // sort key
 					$tx['txid'] = $tx['tx_hash'];
 					$tx['amount'] = $tx['amount'] / 1e12;
 					$raw = $this->rpc->gettransactions(array(
@@ -310,7 +310,7 @@ class WalletRPC {
 				// 3rd param is "payment id"
 				$destination = array(
 					"address"=>arraySafeVal($params, 0),
-					"amount"=> (double) arraySafeVal($params, 1) * 1e12,
+					"amount"=> (float) arraySafeVal($params, 1) * 1e12,
 				);
 				$named_params = array(
 					"mixin"=>0,
@@ -324,7 +324,7 @@ class WalletRPC {
 				$destinations = array();
 				foreach ($params as $dest) {
 					foreach ($dest as $addr => $amount) {
-						$data = array("amount" => (double) $amount * 1e12, "address"=>$addr);
+						$data = array("amount" => (float) $amount * 1e12, "address"=>$addr);
 						$destinations[] = (object) $data;
 					}
 				}
@@ -339,7 +339,7 @@ class WalletRPC {
 			case 'transfer_original':
 				$destination = array(
 					"address"=> arraySafeVal($params, 1),
-					"amount"=> (double) arraySafeVal($params, 2, 0) * 1e12,
+					"amount"=> (float) arraySafeVal($params, 2, 0) * 1e12,
 					// also: "fee" "unlock_time"
 				);
 				$destinations = array();

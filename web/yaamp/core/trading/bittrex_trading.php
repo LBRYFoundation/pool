@@ -37,7 +37,7 @@ function doBittrexTrading($quick=false)
 		if ($balance->Currency == 'BTC') {
 			if (is_object($savebalance)) {
 				$savebalance->balance = $balance->Available;
-				$savebalance->onsell = (double) $balance->Balance - (double) $balance->Available;
+				$savebalance->onsell = (float) $balance->Balance - (float) $balance->Available;
 				$savebalance->save();
 			}
 			continue;

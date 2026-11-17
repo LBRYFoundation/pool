@@ -1,6 +1,6 @@
 <?php
 
-class CExchangeCoin
+abstract class CExchangeCoin
 {
 	public $marketname;
 

@@ -21,7 +21,7 @@ function coinsmarkets_api_query($method)
 	$res= curl_exec($ch);
 	$obj = json_decode($res, true);
 
-	curl_close($ch);
+	unset($ch);
 	return $obj;
 }
 
@@ -71,7 +71,7 @@ function coinsmarkets_api_user($method, $params='')
 	}
 	$obj = json_decode($res, true);
 
-	curl_close($ch);
+	unset($ch);
 
 	return $obj;
 }
@@ -111,7 +111,7 @@ function coinsmarkets_update_market($market)
 	}
 	if(!isset($ticker)) return false;
 
-	$price2 = ((double)$ticker['highestBid'] + (double)$ticker['lowestAsk'])/2;
+	$price2 = ((float)$ticker['highestBid'] + (float)$ticker['lowestAsk'])/2;
 	$market->price = AverageIncrement($market->price, $ticker['highestBid']);
 	$market->price2 = AverageIncrement($market->price2, $price2);
 	$market->pricetime = time();

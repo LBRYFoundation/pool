@@ -77,9 +77,9 @@ class BenchCommand extends CConsoleCommand
 			$rates = dborow("SELECT AVG(khps) AS avg, MIN(khps) AS min, MAX(khps) AS max, COUNT(id) as cnt FROM benchmarks WHERE algo=:algo AND chip=:chip",
 				array(':algo'=>$algo, ':chip'=>$c)
 			);
-			$avg = (double) round($rates['avg'],$decrnd);
-			$min = (double) round($rates['min'],$decrnd);
-			$max = (double) round($rates['max'],$decrnd);
+			$avg = (float) round($rates['avg'],$decrnd);
+			$min = (float) round($rates['min'],$decrnd);
+			$max = (float) round($rates['max'],$decrnd);
 			$cnt = round($rates['cnt'],$decrnd);
 			echo "$algo $c\t$avg kH/s $min-$max ($cnt records)\n";
 		}
@@ -104,9 +104,9 @@ class BenchCommand extends CConsoleCommand
 		foreach($rates as $r) {
 			$algo = $r['algo'];
 			$decrnd = 0;
-			$avg = (double) round($r['avg'],$decrnd);
-			$min = (double) round($r['min'],$decrnd);
-			$max = (double) round($r['max'],$decrnd);
+			$avg = (float) round($r['avg'],$decrnd);
+			$min = (float) round($r['min'],$decrnd);
+			$max = (float) round($r['max'],$decrnd);
 			$cnt = round($r['cnt'],$decrnd);
 			echo "$chip $algo\t$avg kH/s $min-$max ($cnt records)\n";
 		}

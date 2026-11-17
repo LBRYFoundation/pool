@@ -494,7 +494,7 @@ function yaamp_user_rate_bad($userid, $algo=null)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_user_diff_avg-$userid-$algo",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_user_diff_avg-$userid-$algo",
 		"SELECT avg(difficulty) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo", array(':algo'=>$algo));
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_rate_bad-$userid-$algo",
@@ -525,7 +525,7 @@ function yaamp_worker_rate_bad($workerid, $algo=null)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
 		"SELECT avg(difficulty) FROM shares WHERE valid AND time>$delay AND workerid=".$workerid);
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_worker_rate_bad-$workerid-$algo",
@@ -599,7 +599,7 @@ function yaamp_job_rate_bad($jobid)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_job_diff_avg-$jobid",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_job_diff_avg-$jobid",
 		"SELECT avg(difficulty) FROM jobsubmits WHERE valid AND time>$delay AND jobid=".$jobid);
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_job_rate_bad-$jobid",

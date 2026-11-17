@@ -32,7 +32,7 @@ function coinexchange_api_query($method, $params='')
 		debuglog("$exchange: $method failed ($status) ".strip_data($data).' '.curl_error($ch));
 	}
 
-	curl_close($ch);
+	unset($ch);
 
 	return $obj;
 }
@@ -68,9 +68,9 @@ function coinexchange_update_market($market)
 	if(!is_object($m) || !$m->success || empty($m->result)) return false;
 	$ticker = $m->result;
 
-	$price2 = ((double) $ticker->BidPrice + (double) $ticker->AskPrice)/2;
+	$price2 = ((float) $ticker->BidPrice + (float) $ticker->AskPrice)/2;
 	$market->price2 = AverageIncrement($market->price2, $price2);
-	$market->price = AverageIncrement($market->price, (double) $ticker->BidPrice);
+	$market->price = AverageIncrement($market->price, (float) $ticker->BidPrice);
 	$market->pricetime = time();
 	$market->save();
 

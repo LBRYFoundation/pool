@@ -75,7 +75,7 @@ function hitbtc_api_user($method, $params=NULL)
 	if($res === false) {
 		$e = curl_error($ch);
 		debuglog("hitbtc: $e");
-		curl_close($ch);
+		unset($ch);
 		return false;
 	}
 
@@ -85,7 +85,7 @@ function hitbtc_api_user($method, $params=NULL)
 		debuglog("hitbtc: $method failed ($status) ".strip_data($res));
 	}
 
-	curl_close($ch);
+	unset($ch);
 
 	return $result;
 }
@@ -118,7 +118,7 @@ function hitbtc_update_market($market)
 	$ticker = hitbtc_api_query($pair.'/ticker');
 	if(!is_object($ticker) || !isset($ticker->ask)) return false;
 
-	$price2 = ((double) $ticker->bid + (double)$ticker->ask)/2;
+	$price2 = ((float) $ticker->bid + (float)$ticker->ask)/2;
 	$market->price2 = AverageIncrement($market->price2, $price2);
 	$market->price = AverageIncrement($market->price, $ticker->bid);
 	$market->pricetime = time();

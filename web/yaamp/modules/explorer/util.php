@@ -23,7 +23,7 @@ function encodeHex($dec)
 	while (bccomp($dec,0)==1)
 	{
 		$dv=(string)bcdiv($dec,"16",0);
-		$rem=(integer)bcmod($dec,"16");
+		$rem=(int)bcmod($dec,"16");
 		$dec=$dv;
 		$return=$return.$chars[$rem];
 	}
@@ -73,7 +73,7 @@ function encodeBase58($hex)
 	while (bccomp($hex,0)==1)
 	{
 		$dv=(string)bcdiv($hex,"58",0);
-		$rem=(integer)bcmod($hex,"58");
+		$rem=(int)bcmod($hex,"58");
 		$hex=$dv;
 		$return=$return.$chars[$rem];
 	}

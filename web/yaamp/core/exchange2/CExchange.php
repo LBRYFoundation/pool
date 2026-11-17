@@ -7,7 +7,7 @@
 //		marketid (cryptsy)
 //
 
-class CExchange
+abstract class CExchange
 {
 	protected $marketname;
 

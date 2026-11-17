@@ -39,7 +39,7 @@ class CcexAPI
 			$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 			if(!$a) debuglog("c-cex: auth api failed ($status) ".strip_data($feed).' '.curl_error($ch));
 		}
-		curl_close($ch);
+		unset($ch);
 
 		return isset($a) ? $a : false;
 	}

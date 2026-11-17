@@ -29,7 +29,7 @@ function kucoin_api_query($method, $params='', $returnType='object')
 	if($res === false) {
 		$e = curl_error($ch);
 		debuglog("$exchange: $method $e");
-		curl_close($ch);
+		unset($ch);
 		return false;
 	}
 
@@ -42,7 +42,7 @@ function kucoin_api_query($method, $params='', $returnType='object')
 		$status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		debuglog("$exchange: $method failed ($status) ".strip_data($res));
 	}
-	curl_close($ch);
+	unset($ch);
 	return $ret;
 }
 
@@ -105,7 +105,7 @@ function kucoin_api_user($method, $params=NULL, $isPostMethod=false)
 	if($res === false) {
 		$e = curl_error($ch);
 		debuglog("$exchange: $method $e");
-		curl_close($ch);
+		unset($ch);
 		return false;
 	}
 
@@ -115,7 +115,7 @@ function kucoin_api_user($method, $params=NULL, $isPostMethod=false)
 		debuglog("$exchange: $method failed ($status) ".strip_data($res));
 	}
 
-	curl_close($ch);
+	unset($ch);
 
 	return $result;
 }
@@ -149,7 +149,7 @@ function kucoin_update_market($market)
 	if(!kucoin_result_valid($query)) return false;
 	$ticker = $query->data;
 
-	$price2 = ((double) $ticker->bestBid + (double)$ticker->bestAsk)/2;
+	$price2 = ((float) $ticker->bestBid + (float)$ticker->bestAsk)/2;
 	$market->price2 = AverageIncrement($market->price2, $price2);
 	$market->price = AverageIncrement($market->price, $ticker->bestBid);
 	$market->pricetime = min(time(), 0 + $ticker->sequence);
