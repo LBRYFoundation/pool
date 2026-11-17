@@ -126,6 +126,10 @@ esac
 output "Make sure you double check before hitting enter!"
 output ""
 
+# Run mysql as root: ignore ~/.my.cnf (an existing [mysql] password block in
+# /root/.my.cnf from the original installer breaks `mysql` with Access denied)
+mysql_root() { sudo mysql --no-defaults "$@"; }
+
 # Load file with last configuration data if available
 CONF_FILE="${SCRIPT_DIR}/install.conf"
 declare -A CONFMAP=()
@@ -191,12 +195,12 @@ is_yes "${CONFMAP['SUB_DOMAIN']}" || SERVER_NAMES+=" www.${SERVER_NAME}"
 # funds and coinbase transactions are not visible to the new lbcwallet.
 UPGRADE_NOTES=()
 if [[ ${UPGRADE} -eq 1 ]] && command -v mysql &>/dev/null; then
-  LBC_ROW="$(sudo mysql -N -e "SELECT id, IFNULL(rpcport,0), IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
+  LBC_ROW="$(mysql_root -N -e "SELECT id, IFNULL(rpcport,0), IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" 2>/dev/null || true)"
   if [[ -n "${LBC_ROW}" ]]; then
     read -r OLD_COIN_ID OLD_RPCPORT OLD_MASTER_WALLET <<<"${LBC_ROW}"
     if [[ "${OLD_RPCPORT}" != "${LBCWALLET_RPC##*:}" ]]; then
-      IMMATURE_BLOCKS="$(sudo mysql -N -e "SELECT COUNT(*) FROM ${DB_NAME}.blocks WHERE coin_id=${OLD_COIN_ID} AND category IN ('new','immature')")"
-      PENDING_BALANCE="$(sudo mysql -N -e "SELECT IFNULL(ROUND(SUM(balance),8),0) FROM ${DB_NAME}.accounts WHERE coinid=${OLD_COIN_ID}")"
+      IMMATURE_BLOCKS="$(mysql_root -N -e "SELECT COUNT(*) FROM ${DB_NAME}.blocks WHERE coin_id=${OLD_COIN_ID} AND category IN ('new','immature')")"
+      PENDING_BALANCE="$(mysql_root -N -e "SELECT IFNULL(ROUND(SUM(balance),8),0) FROM ${DB_NAME}.accounts WHERE coinid=${OLD_COIN_ID}")"
       output "WARNING: this upgrade moves the pool from the lbrycrdd wallet to a new lbcwallet wallet."
       output "  Old pool wallet address:            ${OLD_MASTER_WALLET:-<none>}"
       output "  Blocks still new/immature:          ${IMMATURE_BLOCKS}"
@@ -502,9 +506,9 @@ output "Now for the database fun!"
 output ""
 sudo systemctl enable --now mariadb
 
-# MariaDB root uses unix_socket auth on Ubuntu, so `sudo mysql` needs no password.
+# MariaDB root uses unix_socket auth on Ubuntu, so `mysql_root` needs no password.
 # Pool users only get privileges on the pool database.
-sudo mysql <<EOF
+mysql_root <<EOF
 CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8 COLLATE utf8_general_ci;
 CREATE USER IF NOT EXISTS 'panel'@'localhost' IDENTIFIED BY '${SECRETS[MYSQL_PANELPASSWD]}';
 ALTER USER 'panel'@'localhost' IDENTIFIED BY '${SECRETS[MYSQL_PANELPASSWD]}';
@@ -537,7 +541,7 @@ import_sql() {
   { echo "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';"; cat; } | mysql --defaults-group-suffix=host1 --force
 }
 
-TABLE_COUNT="$(sudo mysql -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}'")"
+TABLE_COUNT="$(mysql_root -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}'")"
 if [[ "${TABLE_COUNT}" -eq 0 ]]; then
   output "Performing the SQL import"
   zcat "${POOL_SRC}/sql/${SQL_DUMP}" | import_sql
@@ -591,7 +595,7 @@ sudo "${HOME}/pool-start.sh" chain
 
 # Pool wallet address (Base58 legacy; stratum needs a b.../r... address when
 # lbcwallet does not return witness_version/witness_program in validateaddress)
-MASTER_WALLET="$(sudo mysql -N -e "SELECT IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" || true)"
+MASTER_WALLET="$(mysql_root -N -e "SELECT IFNULL(master_wallet,'') FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1" || true)"
 if [[ -n "${MASTER_WALLET}" ]]; then
   # An existing address (e.g. from the old lbrycrdd wallet) is only kept if lbcwallet owns it;
   # stratum refuses to mine to a pool address that is not "ismine".
@@ -624,7 +628,7 @@ fi
 
 # LBC coin row: stratum/web talk to lbcwallet, which proxies chain RPCs to lbcd.
 # On upgrades the existing row (lbrycrdd on port 14390) is repointed to lbcwallet.
-sudo mysql "${DB_NAME}" <<EOF
+mysql_root "${DB_NAME}" <<EOF
 INSERT INTO coins (name, symbol, algo, image, enable, auto_ready, visible, installed,
   rpchost, rpcport, rpcuser, rpcpasswd, rpcencoding, rpccurl, rpcssl, account,
   hassubmitblock, hasgetinfo, usesegwit, txmessage, mature_blocks, block_time,
@@ -642,7 +646,7 @@ UPDATE coins SET algo='lbry', rpchost='127.0.0.1', rpcport=${LBCWALLET_RPC##*:},
   WHERE symbol='LBC';
 UPDATE coins SET master_wallet='${MASTER_WALLET}' WHERE symbol='LBC' AND '${MASTER_WALLET}' <> '';
 EOF
-COIN_ID="$(sudo mysql -N -e "SELECT id FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1")"
+COIN_ID="$(mysql_root -N -e "SELECT id FROM ${DB_NAME}.coins WHERE symbol='LBC' LIMIT 1")"
 [[ -n "${COIN_ID}" ]] || displayErr "Could not create the LBC coin record."
 echo "COIN_ID=${COIN_ID}" | sudo tee "${POOL_ETC}/pool.env" >/dev/null
 
