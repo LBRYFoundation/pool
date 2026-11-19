@@ -68,7 +68,7 @@ class SiteController extends CommonController
 
 			if($coin->save())
 			{
-				if($txfee != $coin->txfee)
+				if($txfee != $coin->txfee && $coin->rpcencoding != 'LBC' && $coin->symbol != 'LBC')
 				{
 					$remote = new WalletRPC($coin);
 					$remote->settxfee($coin->txfee);
@@ -101,7 +101,7 @@ class SiteController extends CommonController
 		$node = getparam('node');
 		if ($coin && $node) {
 			$remote = new WalletRPC($coin);
-			if ($coin->rpcencoding == 'DCR') {
+			if ($coin->rpcencoding == 'DCR' || $coin->rpcencoding == 'LBC' || $coin->symbol == 'LBC') {
 				$res = $remote->node('disconnect', $node);
 				if (!$res) $res = $remote->node('remove', $node);
 				$remote->error = false; // ignore
@@ -122,7 +122,7 @@ class SiteController extends CommonController
 		$node = arraySafeVal($_POST, 'node');
 		if ($coin && $node) {
 			$remote = new WalletRPC($coin);
-			if ($coin->rpcencoding == 'DCR') {
+			if ($coin->rpcencoding == 'DCR' || $coin->rpcencoding == 'LBC' || $coin->symbol == 'LBC') {
 				$remote->addnode($node, 'add');
 				usleep(500*1000);
 				$remote->node('connect', $node);
@@ -135,39 +135,6 @@ class SiteController extends CommonController
 					sleep(1);
 				}
 			}
-		}
-		$this->goback();
-	}
-
-	/////////////////////////////////////////////////
-
-	public function actionTickets()
-	{
-		if(!$this->admin) return;
-		$coin = getdbo('db_coins', getiparam('id'));
-		if (!$coin) {
-			$this->goback();
-		}
-
-		$this->render('coin_tickets', array('coin'=>$coin));
-	}
-
-	public function actionTicketBuy()
-	{
-		if(!$this->admin) return;
-		$coin = getdbo('db_coins', getiparam('id'));
-		$spendlimit = (float) arraySafeVal($_POST, 'spendlimit');
-		$quantity  = (int) arraySafeVal($_POST, 'quantity');
-		if ($coin && $spendlimit) {
-			$remote = new WalletRPC($coin);
-			if ($quantity <= 1)
-				$res = $remote->purchaseticket($coin->account, $spendlimit);
-			else
-				$res = $remote->purchaseticket($coin->account, $spendlimit, 1, $coin->master_wallet, $quantity);
-			if ($res === false)
-				user()->setFlash('error', $remote->error);
-			else
-				user()->setFlash('message', is_string($res) ? "ticket txid: $res" : json_encode($res));
 		}
 		$this->goback();
 	}
@@ -391,11 +358,6 @@ class SiteController extends CommonController
 	public function actionDiff()
 	{
 		$this->render('diff');
-	}
-
-	public function actionMultialgo()
-	{
-		$this->render('multialgo');
 	}
 
 	public function actionMining()
@@ -754,47 +716,6 @@ class SiteController extends CommonController
 
 	/////////////////////////////////////////////////
 
-	public function actionBalances()
-	{
-		if(!$this->admin) return;
-		$this->render('balances');
-	}
-
-	public function actionBalances_results()
-	{
-		if(!$this->admin) return;
-		$this->renderPartial('balances_results');
-	}
-
-	public function actionBalanceUpdate()
-	{
-		if(!$this->admin) return;
-		$id = getiparam('market');
-		$market = getdbo('db_markets', $id);
-		if ($market) {
-			exchange_update_market_by_id($id);
-			$this->redirect(array('/site/balances', 'exch'=>$market->name));
-		} else {
-			$this->goback();
-		}
-	}
-
-	/////////////////////////////////////////////////
-
-	public function actionExchange()
-	{
-		if(!$this->admin) return;
-		$this->render('exchange');
-	}
-
-	public function actionExchange_results()
-	{
-		if(!$this->admin) return;
-		$this->renderPartial('exchange_results');
-	}
-
-	/////////////////////////////////////////////////
-
 	public function actionCoin()
 	{
 		if(!$this->admin) return;
@@ -817,12 +738,6 @@ class SiteController extends CommonController
 	{
 		if(!$this->admin) return;
 		$this->render('monsters');
-	}
-
-	public function actionEmptyMarkets()
-	{
-		if(!$this->admin) return;
-		$this->render('emptymarkets');
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////
@@ -1040,53 +955,6 @@ class SiteController extends CommonController
 		$this->goback();
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-
-	public function actionDeleteExchange()
-	{
-		if(!$this->admin) return;
-		$exchange = getdbo('db_exchange', getiparam('id'));
-		if ($exchange) {
-			$exchange->status = 'deleted';
-			$exchange->price = 0;
-			$exchange->receive_time = time();
-			$exchange->save();
-		}
-		$this->goback();
-	}
-
-	public function actionClearMarket()
-	{
-		if(!$this->admin) return;
-		$market = getdbo('db_markets', getiparam('id'));
-		if($market) {
-			$market->lastsent = null;
-			$market->save();
-		}
-		$this->goback();
-	}
-
-	// called from the dashboard page
-	public function actionClearorder()
-	{
-		if(!$this->admin) return;
-		$order = getdbo('db_orders', getiparam('id'));
-		if ($order) {
-			$order->delete();
-		}
-		$this->goback();
-	}
-
-	public function actionCancelorder()
-	{
-		if(!$this->admin) return;
-		$order = getdbo('db_orders', getiparam('id'));
-
-		cancelExchangeOrder($order);
-
-		$this->goback();
-	}
-
 	////////////////////////////////////////////////////////////////////////////////////////
 
 	public function actionAlgo()
@@ -1114,13 +982,6 @@ class SiteController extends CommonController
 		}
 		user()->setState('yaamp-algo', $algo);
 		$this->redirect("/site/mining");
-	}
-
-	public function actionUpdatePrice()
-	{
-		if(!$this->admin) return;
-		BackendPricesUpdate();
-		$this->goback();
 	}
 
 	public function actionUninstallCoin()
@@ -1151,39 +1012,9 @@ class SiteController extends CommonController
 
 	public function actionOptimize()
 	{
+		if(!$this->admin) return;
 		BackendOptimizeTables();
 		$this->goback();
-	}
-
-	public function actionRunExchange()
-	{
-		if(!$this->admin) return;
-
-		$id = getiparam('id');
-		$balance = getdbo('db_balances', $id);
-
-		if($balance)
-			runExchange($balance->name);
-
-		$tm = round($this->elapsedTime(), 3);
-
-		if ($balance)
-			debuglog("runexchange done ({$balance->name}) {$tm} sec");
-		else
-			debuglog("runexchange failed (no id!)");
-
-		$this->redirect("/site/common");
-	}
-
-	public function actionEval()
-	{
-//		if(!$this->admin) return;
-
-//		$param = getparam('param');
-//		if($param) eval($param);
-//		else $param = '';
-
-//		$this->render('eval', array('param'=>$param));
 	}
 
 	public function actionMainbtc()

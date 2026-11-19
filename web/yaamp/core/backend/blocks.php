@@ -437,42 +437,4 @@ function BackendUpdatePoolBalances($coinid = NULL)
 	//debuglog(__FUNCTION__." took ".round($d1,3)." sec");
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////
-
-function MonitorBTC()
-{
-//	debuglog(__FUNCTION__);
-
-	$coin = getdbosql('db_coins', "symbol='BTC'");
-	if(!$coin) return;
-
-	$remote = new WalletRPC($coin);
-	if(!$remote) return;
-
-	$mostrecent = 0;
-	if($coin->lastblock == null) $coin->lastblock = '';
-	$list = $remote->listsinceblock($coin->lastblock);
-	if(!$list) return;
-
-	$coin->lastblock = $list['lastblock'];
-	$coin->save();
-
-	foreach($list['transactions'] as $transaction)
-	{
-		if(!isset($transaction['blockhash'])) continue;
-		if($transaction['confirmations'] == 0) continue;
-		if($transaction['category'] != 'send') continue;
-		//if($transaction['fee'] != -0.0001) continue;
-
-		debuglog(__FUNCTION__);
-		debuglog($transaction);
-
-		$txurl = "https://blockchain.info/tx/{$transaction['txid']}";
-
-		$b = mail(YAAMP_ADMIN_EMAIL, "withdraw {$transaction['amount']}",
-			"<a href='$txurl'>{$transaction['address']}</a>");
-
-		if(!$b) debuglog('error sending email');
-	}
-}
 

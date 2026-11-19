@@ -5,8 +5,6 @@ JavascriptFile("/yaamp/ui/js/jquery.tablesorter.widgets.js");
 
 echo getAdminSideBarLinks();
 
-echo '&nbsp;<a href="/site/emptymarkets">Empty Markets</a>&nbsp;';
-
 $server = getparam('server');
 
 echo <<<end

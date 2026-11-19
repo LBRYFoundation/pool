@@ -100,9 +100,6 @@ function showPageHeader()
 	if (YIIMP_PUBLIC_BENCHMARK)
 		showItemHeader(controller()->id=='bench', '/bench', 'Benchs');
 
-	if (YAAMP_RENTAL)
-		showItemHeader(controller()->id=='renting', '/renting', 'Rental');
-
 	if(controller()->admin)
 	{
 		if (isAdminIP($_SERVER['REMOTE_ADDR']) === false)
@@ -111,15 +108,6 @@ function showPageHeader()
 		showItemHeader(controller()->id=='coin', '/coin', 'Coins');
 		showItemHeader($action=='common', '/site/common', 'Dashboard');
 		showItemHeader(controller()->id=='site'&&$action=='admin', "/site/admin", 'Wallets');
-
-		if (YAAMP_RENTAL)
-			showItemHeader(controller()->id=='renting' && $action=='admin', '/renting/admin', 'Jobs');
-
-		if (YAAMP_ALLOW_EXCHANGE)
-			showItemHeader(controller()->id=='trading', '/trading', 'Trading');
-
-		if (YAAMP_USE_NICEHASH_API)
-			showItemHeader(controller()->id=='nicehash', '/nicehash', 'Nicehash');
 	}
 
 	echo '<span style="float: right;">';
