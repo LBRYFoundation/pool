@@ -108,7 +108,7 @@ WEB_DIR="/var/web"
 YIIMP_LOG_DIR="/var/log/yiimp"
 BACKUP_DIR="/var/backups/yiimp"
 POOL_ETC="/etc/lbcpool"
-SQL_DUMP="2016-04-03-yaamp.sql.gz"
+SQL_SCHEMA="lbcpool_schema.sql"
 SECRETS_FILE="${HOME}/.lbcpool-secrets"
 CREDENTIALS_FILE="${HOME}/pool-credentials.txt"
 SEED_FILE="${HOME}/lbcwallet-seed.txt"
@@ -789,14 +789,8 @@ import_sql() {
 
 TABLE_COUNT="$(mysql_root -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}'")"
 if [[ "${TABLE_COUNT}" -eq 0 ]]; then
-  output "Performing the SQL import"
-  zcat "${POOL_SRC}/sql/${SQL_DUMP}" | import_sql
-  # every migration newer than the dump, in date order (includes the LBC stratum migrations)
-  for f in "${POOL_SRC}"/sql/*.sql; do
-    [[ "$(basename "${f}")" > "${SQL_DUMP%%-yaamp*}-z" ]] || continue
-    output "... $(basename "${f}")"
-    import_sql <"${f}" || output "WARNING: $(basename "${f}") reported errors (see above)"
-  done
+  output "Performing the SQL import (${SQL_SCHEMA})"
+  import_sql <"${POOL_SRC}/sql/${SQL_SCHEMA}"
 else
   output "Database ${DB_NAME} already has tables, applying only the idempotent LBC migrations"
   for f in "${POOL_SRC}"/sql/2026-*.sql; do
