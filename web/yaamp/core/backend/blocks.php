@@ -97,7 +97,7 @@ function BackendBlockFind1($coinid = NULL)
 			continue;
 		}
 		if(!$coin->enable) continue;
-		if($coin->rpcencoding == 'DCR' && !$coin->auto_ready) continue;
+		if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && !$coin->auto_ready) continue;
 			
 		$dblock = getdbosql('db_blocks', "coin_id=:coinid AND blockhash=:hash AND height=:height AND id!=:blockid",
 			array(':coinid'=>$coin->id, ':hash'=>$db_block->blockhash, ':height'=>$db_block->height, ':blockid'=>$db_block->id)
@@ -114,8 +114,8 @@ function BackendBlockFind1($coinid = NULL)
 
 		$block = $remote->getblock($db_block->blockhash);
 		$block_age = time() - $db_block->time;
-		if($coin->rpcencoding == 'DCR' && $block_age < 2000) {
-			// DCR generated blocks need some time to be accepted by the network (gettransaction)
+		if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && $block_age < 2000) {
+			// DCR/LBC generated blocks need some time to be indexed by the wallet (gettransaction)
 			if (!$block) continue;
 			$txid = $block['tx'][0];
 			$tx = $remote->gettransaction($txid);
@@ -215,8 +215,8 @@ function BackendBlocksUpdate($coinid = NULL)
 		if(!$tx && $block->category != 'orphan') {
 			if ($coin->enable) {
 				debuglog("{$coin->name} unable to find {$block->category} block {$block->height} tx {$block->txhash}!");
-				// DCR orphaned confirmations are not(no more) -1!
-				if($coin->rpcencoding == 'DCR' && $block->category == 'immature' && $coin->auto_ready) {
+				// DCR/LBC (lbcwallet) removes orphaned coinbase txs from wtxmgr rather than returning confirmations=-1
+				if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && $block->category == 'immature' && $coin->auto_ready) {
 					$blockext = $remote->getblock($block->blockhash);
 					$conf = arraySafeVal($blockext,'confirmations',-1);
 					if ($conf == -1 || ($conf > 2 && arraySafeVal($blockext,'nextblockhash','') == '')) {
@@ -225,6 +225,7 @@ function BackendBlocksUpdate($coinid = NULL)
 						$block->amount = 0;
 						$block->category = 'orphan';
 						$block->save();
+						dborun("DELETE FROM earnings WHERE blockid=".intval($block->id)." AND status!=-1");
 						continue;
 					}
 				}
@@ -232,6 +233,7 @@ function BackendBlocksUpdate($coinid = NULL)
 			else if ((time() - $block->time) > (7 * 24 * 3600)) {
 				debuglog("{$coin->name} outdated immature block {$block->height} detected!");
 				$block->category = 'orphan';
+				dborun("DELETE FROM earnings WHERE blockid=".intval($block->id)." AND status!=-1");
 			}
 			$block->save();
 			continue;
