@@ -1507,7 +1507,7 @@ class HTML5
                 $entity = $this->character($start, $this->char);
                 $cond = strlen($e_name) > 0;
 
-                // The rest of the parsing happens bellow.
+                // The rest of the parsing happens below.
                 break;
 
             // Anything else
@@ -1535,7 +1535,7 @@ class HTML5
                 }
 
                 $cond = isset($entity);
-                // The rest of the parsing happens bellow.
+                // The rest of the parsing happens below.
                 break;
         }
 
@@ -4410,7 +4410,7 @@ class HTML5TreeConstructer
 
         foreach ($token['attr'] as $attr) {
             if (!$el->hasAttribute($attr['name'])) {
-                $el->setAttribute($attr['name'], $attr['value']);
+                $el->setAttribute($attr['name'], (string)$attr['value']);
             }
         }
 

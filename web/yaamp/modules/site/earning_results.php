@@ -106,16 +106,16 @@ foreach($earnings as $earning)
 // 	}
 
 	if($block->category == 'immature') {
-		$total += (double) $earning->amount;
-		$total_btc += (double) $earning->amount * $earning->price;
-		$totalimmat += (double) $earning->amount;
+		$total += (float) $earning->amount;
+		$total_btc += (float) $earning->amount * $earning->price;
+		$totalimmat += (float) $earning->amount;
 	}
 	if($block->category == 'generate') {
-		$total += (double) $earning->amount; // "Exchange" state
-		$total_btc += (double) $earning->amount * $earning->price;
+		$total += (float) $earning->amount; // "Exchange" state
+		$total_btc += (float) $earning->amount * $earning->price;
 	}
 	else if($block->category == 'stake' || $block->category == 'generated') {
-		$totalstake += (double) $earning->amount;
+		$totalstake += (float) $earning->amount;
 	}
 }
 

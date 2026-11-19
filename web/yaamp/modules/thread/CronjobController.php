@@ -35,7 +35,7 @@ class CronjobController extends CommonController
 		else if(!$webserver_running)
 		{
 			debuglog('starting webserver');
-			system("service $webserver start");
+			system(posix_geteuid() === 0 ? "service $webserver start" : "sudo -n service $webserver start");
 		}
 	}
 
@@ -46,14 +46,10 @@ class CronjobController extends CommonController
 
 		$this->monitorApache();
 
-		$last_complete = memcache_get($this->memcache->memcache, "cronjob_block_time_start");
-		if($last_complete+(5*60) < time())
-			dborun("update jobs set active=false");
 		BackendBlockFind1();
 		if(!memcache_get($this->memcache->memcache, 'balances_locked')) {
 			BackendClearEarnings();
 		}
-		BackendRentingUpdate();
 		BackendProcessList();
 		BackendBlocksUpdate();
 
@@ -72,18 +68,6 @@ class CronjobController extends CommonController
 		BackendStatsUpdate();
 		BackendUsersUpdate();
 
-		BackendUpdateServices();
-		BackendUpdateDeposit();
-
-		MonitorBTC();
-
-		$last = memcache_get($this->memcache->memcache, 'last_renting_payout2');
-		if($last + 5*60 < time() && !memcache_get($this->memcache->memcache, 'balances_locked'))
-		{
-			memcache_set($this->memcache->memcache, 'last_renting_payout2', time());
-			BackendRentingPayout();
-		}
-
 		$last = memcache_get($this->memcache->memcache, 'last_stats2');
 		if($last + 5*60 < time())
 		{
@@ -100,8 +84,6 @@ class CronjobController extends CommonController
 //		debuglog(__METHOD__);
 		set_time_limit(0);
 
-//		BackendRunCoinActions();
-
 		$state = memcache_get($this->memcache->memcache, 'cronjob_main_state');
 		if(!$state) $state = 0;
 
@@ -111,46 +93,9 @@ class CronjobController extends CommonController
 		switch($state)
 		{
 			case 0:
-				updateRawcoins();
-
-				$btcusd = bitstamp_btcusd();
-				if($btcusd) {
-					$mining = getdbosql('db_mining');
-					if (!$mining) $mining = new db_mining;
-					$mining->usdbtc = $btcusd;
-					$mining->save();
-				}
-
-				break;
-
 			case 1:
-				if(!YAAMP_PRODUCTION) break;
-
-				getBitstampBalances();
-				getCexIoBalances();
-				doBittrexTrading();
-				doCrex24Trading();
-				doCryptopiaTrading();
-				doKrakenTrading();
-				doLiveCoinTrading();
-				doPoloniexTrading();
-				break;
-
 			case 2:
-				if(!YAAMP_PRODUCTION) break;
-
-				doBinanceTrading();
-				doCCexTrading();
-				doBleutradeTrading();
-				doKuCoinTrading();
-				doNovaTrading();
-				doYobitTrading();
-				doCoinsMarketsTrading();
-				break;
-
 			case 3:
-				BackendPricesUpdate();
-				BackendWatchMarkets();
 				break;
 
 			case 4:
@@ -158,7 +103,6 @@ class CronjobController extends CommonController
 				break;
 
 			case 5:
-				TradingSellCoins();
 				break;
 
 			case 6:
@@ -200,7 +144,7 @@ class CronjobController extends CommonController
 
 		memcache_set($this->memcache->memcache, 'apache_locked', true);
 		if(YAAMP_USE_NGINX)
-			system("service nginx stop");
+			system(posix_geteuid() === 0 ? "service nginx stop" : "sudo -n service nginx stop");
 
 		sleep(10);
 		BackendDoBackup();

@@ -27,16 +27,16 @@ foreach ($markets as $m) {
 	foreach($stats as $histo)
 	{
 		$d = date('Y-m-d H:i', $histo->time);
-		$series[$m['name']][] = array($d, (double) bitcoinvaluetoa($histo->price));
+		$series[$m['name']][] = array($d, (float) bitcoinvaluetoa($histo->price));
 	}
 
 	if ($histo && $market->pricetime && $market->pricetime > $histo->time) {
 		$d = date('Y-m-d H:i', $market->pricetime);
-		$series[$m['name']][] = array($d, (double) bitcoinvaluetoa($market->price));
+		$series[$m['name']][] = array($d, (float) bitcoinvaluetoa($market->price));
 	}
 
-	$min = min($min, (double) $m['min']);
-	$max = max($max, (double) $m['max']);
+	$min = min($min, (float) $m['min']);
+	$max = max($max, (float) $m['max']);
 }
 
 if ($min == 999999999) {
@@ -49,13 +49,13 @@ if ($min == 999999999) {
 $stats = getdbolist('db_market_history', "time>$t AND idcoin={$id} AND idmarket IS NULL ORDER BY time");
 foreach($stats as $histo) {
 	$d = date('Y-m-d H:i', $histo->time);
-	$series[YAAMP_SITE_NAME][] = array($d, (double) bitcoinvaluetoa($histo->price));
+	$series[YAAMP_SITE_NAME][] = array($d, (float) bitcoinvaluetoa($histo->price));
 	$max = max($max, $histo->price);
 }
 
 echo json_encode(array(
 	'data'=>array_values($series),
 	'labels'=>array_keys($series),
-	'rangeMin'=> (double) ($min * 0.95),
-	'rangeMax'=> (double) ($max * 1.05),
+	'rangeMin'=> (float) ($min * 0.95),
+	'rangeMax'=> (float) ($max * 1.05),
 ));

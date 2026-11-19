@@ -1,22 +1,12 @@
-OUT_GO=blocknotify-dcr
 OUTPUT=blocknotify-dcr
-ROOT=`pwd`
 
 all:
-	rm -f $(OUT_GO)
-	rm -rf vendor
-	glide install
-	ln -s ../vendor vendor/src
-	rm -f vendor/src/github.com/decred/dcrrpcclient/wallet.go
-	GOPATH="$(GOPATH):$(ROOT)/vendor" go build
+	go build -trimpath -o $(OUTPUT) .
 
 install: all
-	strip -s $(OUT_GO)
+	strip -s $(OUTPUT)
 	killall -9 $(OUTPUT) || echo ok
-	mv $(OUT_GO) ../bin/$(OUTPUT)
-	sh -c "../bin/$(OUTPUT) &"
+	mv $(OUTPUT) ../bin/$(OUTPUT)
 
 clean:
-	rm -f $(OUT_GO)
-	rm -rf vendor
-
+	rm -f $(OUTPUT)

@@ -114,7 +114,7 @@ foreach ($in_db as $row) {
 	$power *= $factor;
 
 	$cost = powercost_mBTC($power);
-	$ppw = $power>0 ? (double) $row['khps']/$power : 0.;
+	$ppw = $power>0 ? (float) $row['khps']/$power : 0.;
 	$ppw_label = ($power>0 ? Itoa2(1000*round($ppw,3),3).'H' : '-');
 
 	if ($algo == 'equihash') {

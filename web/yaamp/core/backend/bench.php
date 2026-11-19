@@ -51,7 +51,7 @@ function BenchUpdateChips()
 			$rates = dborow("SELECT AVG(khps) AS avg, COUNT(id) as cnt FROM benchmarks WHERE algo=:algo AND chip=:chip",
 				array(':algo'=>$bench->algo, ':chip'=>$chip)
 			);
-			$avg = (double) $rates['avg'];
+			$avg = (float) $rates['avg'];
 			$cnt = intval($rates['cnt']);
 			if ($cnt > 250) {
 				$bench->delete();

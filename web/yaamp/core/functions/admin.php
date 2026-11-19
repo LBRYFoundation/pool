@@ -5,7 +5,6 @@
 function getAdminSideBarLinks()
 {
 $links = <<<end
-<a href="/site/exchange">Exchanges</a>&nbsp;
 <a href="/site/botnets">Botnets</a>&nbsp;
 <a href="/site/user">Users</a>&nbsp;
 <a href="/site/worker">Workers</a>&nbsp;
@@ -63,21 +62,30 @@ function getAdminWalletLinks($coin, $info=NULL, $src='wallet')
 // Check if $IP is in $CIDR range
 function ipCIDRCheck($IP, $CIDR)
 {
-	list($net, $mask) = explode('/', $CIDR);
+	$parts = explode('/', $CIDR, 2);
+	if (count($parts) !== 2) return false;
+	list($net, $mask) = $parts;
+
+	$mask = intval($mask);
+	if ($mask < 0 || $mask > 32) return false;
 
 	$ip_net = ip2long($net);
-	$ip_mask = ~((1 << (32 - $mask)) - 1);
-
 	$ip_ip = ip2long($IP);
-	$ip_ip_net = $ip_ip & $ip_mask;
+	if ($ip_net === false || $ip_ip === false) return false;
 
-	return ($ip_ip_net === $ip_net);
+	$ip_mask = $mask === 0 ? 0 : (~((1 << (32 - $mask)) - 1));
+	return (($ip_ip & $ip_mask) === ($ip_net & $ip_mask));
 }
 
 function isAdminIP($ip)
 {
+	if (empty($ip) || !defined('YAAMP_ADMIN_IP') || trim(YAAMP_ADMIN_IP) === '')
+		return false;
+
 	foreach(explode(',', YAAMP_ADMIN_IP) as $range)
 	{
+		$range = trim($range);
+		if ($range === '') continue;
 		if (strpos($range, '/')) {
 			if(ipCIDRCheck($ip, $range) === true) return true;
 		} else if ($range === $ip) {
@@ -85,6 +93,16 @@ function isAdminIP($ip)
 		}
 	}
 	return false;
+}
+
+function getBestMarket($coin)
+{
+	return NULL;
+}
+
+function getMarketUrl($coin, $marketName)
+{
+	return '#';
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////

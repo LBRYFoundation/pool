@@ -25,10 +25,10 @@ function settings_get($key, $default=null)
 	case 'int':
 		return intval($value);
 	case 'percent':
-		return ((double) $value) / 100.0;
+		return ((float) $value) / 100.0;
 	case 'price':
 	case 'real':
-		return (double) $value;
+		return (float) $value;
 	case 'json':
 		return json_decode($value, true);
 	}

@@ -112,7 +112,7 @@ class UserCommand extends CConsoleCommand
 		));
 
 		if (empty($rows)) {
-			$date = strftime("%Y-%m-%d", $ts);
+			$date = date("Y-m-d", $ts);
 			echo "no user(s) found which are inactive since $date!\n";
 			return 0;
 		}
@@ -153,7 +153,7 @@ class UserCommand extends CConsoleCommand
 		foreach ($rows as $worker) {
 			$user = getdbo('db_accounts', $worker->userid);
 			if (!$user) continue;
-			$time = strftime("%Y-%m-%d %H:%M:%S", $worker->time);
+			$time = date("Y-m-d H:i:s", $worker->time);
 			echo "$time\t{$user->username}\t{$worker->ip}\t{$worker->algo}\n";
 		}
 

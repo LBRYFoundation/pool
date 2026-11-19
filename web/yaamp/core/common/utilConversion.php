@@ -11,7 +11,7 @@ function target_to_diff($target)
 {
 	if(!$target) return 0;
 
-	$d = (double) 0x0000ffff00000000/$target;
+	$d = (float) 0x0000ffff00000000/$target;
 	return round_difficulty($d);
 }
 
@@ -40,7 +40,7 @@ function decode_compact($input)
 
 function hash_to_difficulty($coin, $hash)
 {
-	$target = (double) 0.;
+	$target = (float) 0.;
 	$bin = pack('H*', $hash);
 	// direct 'P' (uint64) type requires PHP 5.6.3
 	$bytes = unpack('C*', $bin);
@@ -67,13 +67,10 @@ function htoi($s)
 //		debuglog("{$s[$x]}");
 
 		if($s[$x] >= '0' && $s[$x] <='9')
-			$val = $val * 16 + $s[$x] - '0';
+			$val = $val * 16 + ord($s[$x]) - ord('0');
 
 		else if($s[$x]>='A' && $s[$x] <='F')
 		{
-			debuglog($s[$x]);
-			debuglog($s[$x] - chr('A'));
-
 			$val = $val * 16 + ord($s[$x]) - ord('A') + 10;
 		}
 

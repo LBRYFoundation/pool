@@ -271,7 +271,13 @@ json_value *rpc_call(YAAMP_RPC *rpc, char const *method, char const *params)
 	char *buffer = rpc_do_call(rpc, message);
 
 	free(message);
-	if(!buffer) return NULL;
+	if(!buffer) {
+#ifdef HAVE_CURL
+		if (rpc->curl)
+			return rpc_curl_call(rpc, method, params);
+#endif
+		return NULL;
+	}
 
 	json_value *json = json_parse(buffer, strlen(buffer));
 	if(!json) {

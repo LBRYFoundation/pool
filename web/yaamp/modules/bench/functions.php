@@ -220,7 +220,7 @@ function formatClientName($version)
 
 function powercost_mBTC($watts)
 {
-	$btcusd = (double) controller()->memcache->get_database_scalar("btc_in_usd", "SELECT usdbtc FROM mining LIMIT 1");
+	$btcusd = (float) controller()->memcache->get_database_scalar("btc_in_usd", "SELECT usdbtc FROM mining LIMIT 1");
 	if (!$btcusd) $btcusd = 500;
 	return (YIIMP_KWH_USD_PRICE * 24 * $watts) / $btcusd;
 }

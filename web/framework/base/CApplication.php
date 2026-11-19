@@ -3,9 +3,9 @@
  * CApplication class file.
  *
  * @author Qiang Xue <qiang.xue@gmail.com>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  */
 
 /**
@@ -348,7 +348,7 @@ abstract class CApplication extends CModule
 	 * Returns the time zone used by this application.
 	 * This is a simple wrapper of PHP function date_default_timezone_get().
 	 * @return string the time zone used by this application.
-	 * @see http://php.net/manual/en/function.date-default-timezone-get.php
+	 * @see https://php.net/manual/en/function.date-default-timezone-get.php
 	 */
 	public function getTimeZone()
 	{
@@ -359,7 +359,7 @@ abstract class CApplication extends CModule
 	 * Sets the time zone used by this application.
 	 * This is a simple wrapper of PHP function date_default_timezone_set().
 	 * @param string $value the time zone used by this application.
-	 * @see http://php.net/manual/en/function.date-default-timezone-set.php
+	 * @see https://php.net/manual/en/function.date-default-timezone-set.php
 	 */
 	public function setTimeZone($value)
 	{
@@ -427,8 +427,8 @@ abstract class CApplication extends CModule
 	 */
 	public function setLocaleDataPath($value)
 	{
-		$property=new ReflectionProperty($this->localeClass,'dataPath');
-		$property->setValue($value);
+		$class=new ReflectionClass($this->localeClass);
+		$class->setStaticPropertyValue('dataPath',$value);
 	}
 
 	/**
@@ -802,9 +802,7 @@ abstract class CApplication extends CModule
 
 			$log="$message ($file:$line)\nStack trace:\n";
 			$trace=debug_backtrace();
-			// skip the first 3 stacks as they do not tell the error position
-			if(count($trace)>3)
-				$trace=array_slice($trace,3);
+			array_shift($trace);
 			foreach($trace as $i=>$t)
 			{
 				if(!isset($t['file']))
@@ -903,13 +901,13 @@ abstract class CApplication extends CModule
 		if(YII_DEBUG)
 		{
 			echo "<h1>PHP Error [$code]</h1>\n";
-			echo "<p>$message ($file:$line)</p>\n";
+			echo "<p>".nl2br($this->htmlEncodeInternal($message))." (".$this->htmlEncodeInternal($file).":$line)</p>\n";
 			echo '<pre>';
 
 			$trace=debug_backtrace();
-			// skip the first 3 stacks as they do not tell the error position
-			if(count($trace)>3)
-				$trace=array_slice($trace,3);
+			// skip the first 2 stacks as they are always irrelevant
+			if(count($trace)>2)
+				$trace=array_slice($trace,2);
 			foreach($trace as $i=>$t)
 			{
 				if(!isset($t['file']))
@@ -929,7 +927,7 @@ abstract class CApplication extends CModule
 		else
 		{
 			echo "<h1>PHP Error [$code]</h1>\n";
-			echo "<p>$message</p>\n";
+			echo "<p>".nl2br($this->htmlEncodeInternal($message))."</p>\n";
 		}
 	}
 
@@ -944,14 +942,24 @@ abstract class CApplication extends CModule
 		if(YII_DEBUG)
 		{
 			echo '<h1>'.get_class($exception)."</h1>\n";
-			echo '<p>'.$exception->getMessage().' ('.$exception->getFile().':'.$exception->getLine().')</p>';
-			echo '<pre>'.$exception->getTraceAsString().'</pre>';
+			echo '<p>'.nl2br($this->htmlEncodeInternal($exception->getMessage())).' ('.$this->htmlEncodeInternal($exception->getFile()).':'.$exception->getLine().')</p>';
+			echo '<pre>'.$this->htmlEncodeInternal($exception->getTraceAsString()).'</pre>';
 		}
 		else
 		{
 			echo '<h1>'.get_class($exception)."</h1>\n";
-			echo '<p>'.$exception->getMessage().'</p>';
+			echo '<p>'.nl2br($this->htmlEncodeInternal($exception->getMessage())).'</p>';
 		}
+	}
+
+	/**
+	 * Encode html without a dependency on CHtml::encode(). This method is internally used by displayError/displayException.
+	 * @param string $string
+	 * @return string
+	 */
+	private function htmlEncodeInternal($string)
+	{
+		return htmlspecialchars($string, ENT_NOQUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
 	}
 
 	/**

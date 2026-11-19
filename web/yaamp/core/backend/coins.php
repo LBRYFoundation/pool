@@ -87,21 +87,15 @@ function BackendCoinsUpdate()
 
 		if(empty($coin->master_wallet))
 		{
-			if ($coin->rpcencoding == 'DCR' && empty($coin->account)) $coin->account = 'default';
+			if (($coin->rpcencoding == 'DCR' || $coin->rpcencoding == 'LBC' || $coin->symbol == 'LBC') && empty($coin->account))
+				$coin->account = 'default';
 			$coin->master_wallet = $remote->getaccountaddress($coin->account);
 		}
 
 		if(empty($coin->rpcencoding))
 		{
-			$difficulty = $remote->getdifficulty();
-			if(is_array($difficulty))
-				$coin->rpcencoding = 'POS';
-			else if ($coin->symbol == 'DCR')
-				$coin->rpcencoding = 'DCR';
-			else if ($coin->symbol == 'ETH')
-				$coin->rpcencoding = 'GETH';
-			else if ($coin->symbol == 'NIRO')
-				$coin->rpcencoding = 'NIRO';
+			if ($coin->symbol == 'LBC')
+				$coin->rpcencoding = 'LBC';
 			else
 				$coin->rpcencoding = 'POW';
 		}
@@ -116,125 +110,41 @@ function BackendCoinsUpdate()
 		}
 
 		if($coin->auxpow == NULL)
+			$coin->auxpow = false;
+
+		$template = $remote->getblocktemplate('{}');
+
+		if($template && isset($template['coinbasevalue']))
 		{
-			$ret = $remote->getauxblock();
+			$coin->reward = $template['coinbasevalue']/100000000*$coin->reward_mul;
 
-			if(strcasecmp($remote->error, 'method not found') == 0)
-				$coin->auxpow = false;
-			else
-				$coin->auxpow = true;
+			if(isset($template['payee_amount']) && $coin->symbol != 'LIMX') {
+				$coin->charity_amount = doubleval($template['payee_amount'])/100000000;
+				$coin->reward -= $coin->charity_amount;
+			}
+			else if(!empty($coin->charity_address)) {
+				if(!$coin->charity_amount)
+					$coin->reward -= $coin->reward * $coin->charity_percent / 100;
+			}
+
+			if(isset($template['bits']))
+			{
+				$target = decode_compact($template['bits']);
+				$coin->difficulty = target_to_diff($target);
+			}
 		}
-
-//		if($coin->symbol != 'BTC')
-//		{
-//			if($coin->symbol == 'PPC')
-//				$template = $remote->getblocktemplate('');
-//			else
-			$template = $remote->getblocktemplate('{}');
-
-			if($template && isset($template['coinbasevalue']))
-			{
-				$coin->reward = $template['coinbasevalue']/100000000*$coin->reward_mul;
-
-				if($coin->symbol == 'TAC' && isset($template['_V2']))
-					$coin->charity_amount = $template['_V2']/100000000;
-
-				if(isset($template['payee_amount']) && $coin->symbol != 'LIMX') {
-					$coin->charity_amount = doubleval($template['payee_amount'])/100000000;
-					$coin->reward -= $coin->charity_amount;
-				}
-
-				else if(isset($template['masternode']) && arraySafeVal($template,'masternode_payments_enforced')) {
-					if (arraySafeVal($template,'masternode_payments_started'))
-						$coin->reward -= arraySafeVal($template['masternode'],'amount',0)/100000000;
-					$coin->hasmasternodes = true;
-				}
-
-				else if($coin->symbol == 'XZC') {
-					// coinbasevalue here is the amount available for miners, not the full block amount
-					$coin->reward = arraySafeVal($template,'coinbasevalue')/100000000 * $coin->reward_mul;
-					$coin->charity_amount = $coin->reward * $coin->charity_percent / 100;
-				}
-
-				else if(!empty($coin->charity_address)) {
-					if(!$coin->charity_amount)
-						$coin->reward -= $coin->reward * $coin->charity_percent / 100;
-				}
-
-				if(isset($template['bits']))
-				{
-					$target = decode_compact($template['bits']);
-					$coin->difficulty = target_to_diff($target);
-				}
-			}
-
-			else if ($coin->rpcencoding == 'GETH' || $coin->rpcencoding == 'NIRO')
-			{
-				$coin->auto_ready = ($coin->connections > 0);
-			}
-
-			else if(strcasecmp($remote->error, 'method not found') == 0)
-			{
-				$template = $remote->getmemorypool();
-				if($template && isset($template['coinbasevalue']))
-				{
-					$coin->usememorypool = true;
-					$coin->reward = $template['coinbasevalue']/100000000*$coin->reward_mul;
-
-					if(isset($template['bits']))
-					{
-						$target = decode_compact($template['bits']);
-						$coin->difficulty = target_to_diff($target);
-					}
-				} else {
-					$coin->auto_ready = false;
-					$coin->errors = $remote->error;
-				}
-			}
-
-			else if ($coin->symbol == 'ZEC' || $coin->rpcencoding == 'ZEC')
-			{
-				if($template && isset($template['coinbasetxn']))
-				{
-					// no coinbasevalue in ZEC blocktemplate :/
-					$txn = $template['coinbasetxn'];
-					$coin->charity_amount = arraySafeVal($txn,'foundersreward',0)/100000000;
-					$coin->reward = $coin->charity_amount * 4 + arraySafeVal($txn,'fee',0)/100000000;
-					// getmininginfo show current diff, getinfo the last block one
-					$mininginfo = $remote->getmininginfo();
-					$coin->difficulty = ArraySafeVal($mininginfo,'difficulty',$coin->difficulty);
-					//$target = decode_compact($template['bits']);
-					//$diff = target_to_diff($target); // seems not standard 0.358557563 vs 187989.937 in getmininginfo
-					//target 00000002c0930000000000000000000000000000000000000000000000000000 => 0.358557563 (bits 1d02c093)
-					//$diff = hash_to_difficulty($coin, $template['target']);
-					//debuglog("ZEC target {$template['bits']} -> $diff");
-				} else {
-					$coin->auto_ready = false;
-					$coin->errors = $remote->error;
-				}
-			}
-
-			else if ($coin->rpcencoding == 'DCR')
-			{
-				$wi = $remote->walletinfo();
-				$coin->auto_ready = ($coin->connections > 0 && arraySafeVal($wi,"daemonconnected"));
-				if ($coin->auto_ready && arraySafeVal($wi,"unlocked",false) == false) {
-					debuglog($coin->symbol." wallet is not unlocked!");
-				}
-			}
-
-			else
-			{
-				$coin->auto_ready = false;
-				$coin->errors = $remote->error;
-			}
-
-			if(strcasecmp($coin->errors, 'No more PoW blocks') == 0)
-			{
-				$coin->dontsell = true;
-				$coin->auto_ready = false;
-			}
-//		}
+		else if ($coin->rpcencoding == 'LBC' || $coin->symbol == 'LBC')
+		{
+			// Keep LBC auto_ready across transient lbcd/lbcwallet sync states
+			if ($coin->connections > 0)
+				$coin->auto_ready = true;
+			$coin->errors = $remote->error;
+		}
+		else
+		{
+			$coin->auto_ready = false;
+			$coin->errors = $remote->error;
+		}
 
 		if($coin->block_height != $info['blocks'])
 		{

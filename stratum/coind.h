@@ -5,6 +5,7 @@ public:
 	bool newcoind;
 
 	YAAMP_RPC rpc;
+	YAAMP_RPC rpc_wallet;
 	char rpcencoding[32];
 
 	pthread_mutex_t mutex;

@@ -43,7 +43,7 @@ function colorizeJson($json)
 		$ts = intval($m);
 		if ($ts > 1400000000 && $ts < 1600000000) {
 			$sfx = $matches[2][$n];
-			$date = strftime("<u>%Y-%m-%d %T %z</u>", $ts);
+			$date = "<u>".date("Y-m-d H:i:s O", $ts)."</u>";
 			$json = str_replace(' '.$m.$sfx, ' "'.$date.'"'.$sfx, $json);
 		}
 	}

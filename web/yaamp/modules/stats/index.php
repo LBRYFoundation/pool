@@ -31,9 +31,9 @@ $row3 = controller()->memcache->get_database_row("stats_col3-$algo",
 
 if($row1['a']>0 && $row2['a']>0 && $row3['a']>0)
 {
-	$a1 = max(1., (double) $row1['a']);
-	$a2 = max(1., (double) $row2['a']);
-	$a3 = max(1., (double) $row3['a']);
+	$a1 = max(1., (float) $row1['a']);
+	$a2 = max(1., (float) $row2['a']);
+	$a3 = max(1., (float) $row3['a']);
 
 	$btcmhday1 = bitcoinvaluetoa(($row1['b'] / 2)  * $algo_factor * (1000000 / $a1));
 	$btcmhday2 = bitcoinvaluetoa(($row2['b'] / 7)  * $algo_factor * (1000000 / $a2));

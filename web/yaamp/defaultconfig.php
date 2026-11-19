@@ -26,27 +26,6 @@ if (!defined('YAAMP_PAYMENTS_FREQ')) define('YAAMP_PAYMENTS_FREQ', 24*60*60);
 if (!defined('YAAMP_PAYMENTS_MINI')) define('YAAMP_PAYMENTS_MINI', 0.001);
 
 if (!defined('YAAMP_ALLOW_EXCHANGE')) define('YAAMP_ALLOW_EXCHANGE', false);
-if (!defined('EXCH_AUTO_WITHDRAW')) define('EXCH_AUTO_WITHDRAW', 9999.9999);
-
-if (!defined('EXCH_BINANCE_KEY')) define('EXCH_BINANCE_KEY', '');
-if (!defined('EXCH_BITTREX_KEY')) define('EXCH_BITTREX_KEY', '');
-if (!defined('EXCH_BITSTAMP_ID')) define('EXCH_BITSTAMP_ID', '');
-if (!defined('EXCH_BITSTAMP_KEY')) define('EXCH_BITSTAMP_KEY','');
-if (!defined('EXCH_BLEUTRADE_KEY')) define('EXCH_BLEUTRADE_KEY', '');
-if (!defined('EXCH_CCEX_KEY')) define('EXCH_CCEX_KEY', '');
-if (!defined('EXCH_CEXIO_ID')) define('EXCH_CEXIO_ID', '');
-if (!defined('EXCH_CEXIO_KEY')) define('EXCH_CEXIO_KEY', '');
-if (!defined('EXCH_CREX24_KEY')) define('EXCH_CREX24_KEY', '');
-if (!defined('EXCH_CRYPTOPIA_KEY')) define('EXCH_CRYPTOPIA_KEY', '');
-if (!defined('EXCH_HITBTC_KEY')) define('EXCH_HITBTC_KEY', '');
-if (!defined('EXCH_POLONIEX_KEY')) define('EXCH_POLONIEX_KEY', '');
-if (!defined('EXCH_YOBIT_KEY')) define('EXCH_YOBIT_KEY', '');
-if (!defined('EXCH_KRAKEN_KEY')) define('EXCH_KRAKEN_KEY', '');
-if (!defined('EXCH_KUCOIN_KEY')) define('EXCH_KUCOIN_KEY', '');
-if (!defined('EXCH_KUCOIN_PASSPHRASE')) define('EXCH_KUCOIN_PASSPHRASE', '');
-if (!defined('EXCH_LIVECOIN_KEY')) define('EXCH_LIVECOIN_KEY', '');
-if (!defined('EXCH_NOVA_KEY')) define('EXCH_NOVA_KEY', '');
-if (!defined('EXCH_STOCKSEXCHANGE_KEY')) define('EXCH_STOCKSEXCHANGE_KEY', '');
 
 if (!defined('YAAMP_BTCADDRESS')) define('YAAMP_BTCADDRESS', '');
 if (!defined('YAAMP_SITE_URL')) define('YAAMP_SITE_URL', 'localhost');
@@ -54,24 +33,26 @@ if (!defined('YAAMP_API_URL')) define('YAAMP_API_URL', YAAMP_SITE_URL);
 if (!defined('YAAMP_API_PAYOUTS')) define('YAAMP_API_PAYOUTS', false);
 if (!defined('YAAMP_API_PAYOUTS_PERIOD')) define('YAAMP_API_PAYOUTS_PERIOD', 24 * 60 * 60);
 if (!defined('YAAMP_STRATUM_URL')) define('YAAMP_STRATUM_URL', YAAMP_SITE_URL);
-if (!defined('YAAMP_SITE_NAME')) define('YAAMP_SITE_NAME', 'YiiMP');
-if (!defined('YAAMP_DEFAULT_ALGO')) define('YAAMP_DEFAULT_ALGO', 'x11');
+if (!defined('YAAMP_SITE_NAME')) define('YAAMP_SITE_NAME', 'LBRY Pool');
+if (!defined('YAAMP_DEFAULT_ALGO')) define('YAAMP_DEFAULT_ALGO', 'lbry');
 if (!defined('YAAMP_ADMIN_EMAIL')) define('YAAMP_ADMIN_EMAIL', 'yiimp@spam.la');
 if (!defined('YAAMP_ADMIN_IP')) define('YAAMP_ADMIN_IP', '127.0.0.1');
 if (!defined('YAAMP_ADMIN_WEBCONSOLE')) define('YAAMP_ADMIN_WEBCONSOLE', true);
 
-if (!defined('YAAMP_CREATE_NEW_COINS')) define('YAAMP_CREATE_NEW_COINS', true);
+if (!defined('YAAMP_CREATE_NEW_COINS')) define('YAAMP_CREATE_NEW_COINS', false);
 if (!defined('YAAMP_NOTIFY_NEW_COINS')) define('YAAMP_NOTIFY_NEW_COINS', false);
 
 if (!defined('YAAMP_LIMIT_ESTIMATE')) define('YAAMP_LIMIT_ESTIMATE', false);
 if (!defined('YAAMP_RENTAL')) define('YAAMP_RENTAL', false);
 if (!defined('YAAMP_USE_NICEHASH_API')) define('YAAMP_USE_NICEHASH_API', false);
 
-if (!defined('NICEHASH_API_KEY')) define('NICEHASH_API_KEY','');
-if (!defined('NICEHASH_API_ID')) define('NICEHASH_API_ID','0000');
-if (!defined('NICEHASH_DEPOSIT')) define('NICEHASH_DEPOSIT','');
-if (!defined('NICEHASH_DEPOSIT_AMOUNT')) define('NICEHASH_DEPOSIT_AMOUNT','0.01');
-
 // cli stuff
 if (!defined('YIIMP_CLI_ALLOW_TXS')) define('YIIMP_CLI_ALLOW_TXS', false);
+
+// LBRY daemon (lbcd) RPC fallback for chain/mining methods not served by lbcwallet (e.g. getblocktemplate, submitblock, getclaimtrie)
+if (!defined('LBC_DAEMON_HOST')) define('LBC_DAEMON_HOST', '127.0.0.1');
+if (!defined('LBC_DAEMON_PORT')) define('LBC_DAEMON_PORT', 9245);
+if (!defined('LBC_DAEMON_SSL')) define('LBC_DAEMON_SSL', false);
+if (!defined('LBC_DAEMON_CERT')) define('LBC_DAEMON_CERT', '');
+
 

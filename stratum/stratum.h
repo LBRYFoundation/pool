@@ -77,6 +77,9 @@ extern char g_stratum_coin_include[256];
 extern char g_stratum_coin_exclude[256];
 
 extern char g_stratum_algo[256];
+// Max length of the configurable coinbase signature. The whole coinbase scriptSig
+// (height + flags + time + 8-byte extranonce + sig) must stay <= 100 bytes (consensus rule).
+#define YAAMP_COINBASE_SIG_MAX 40
 extern char g_stratum_coinbase_sig[128];
 extern double g_stratum_difficulty;
 extern double g_stratum_min_diff;

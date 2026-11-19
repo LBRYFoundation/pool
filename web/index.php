@@ -1,6 +1,7 @@
 <?php
 
 //define('YII_DEBUG', true);
+error_reporting(error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 
 require_once('serverconfig.php');
 require_once('yaamp/defaultconfig.php');

@@ -49,9 +49,8 @@ void coind_sort()
 	}
 }
 
-bool coind_can_mine(YAAMP_COIND *coind, bool isaux)
+bool coind_can_mine(YAAMP_COIND *coind)
 {
-	if(isaux) return false;
 	if(coind->deleted) return false;
 	if(!coind->enable) return false;
 	if(!coind->auto_ready) return false;
@@ -94,10 +93,11 @@ bool coind_validate_address(YAAMP_COIND *coind)
 {
 	if(!coind->wallet[0]) return false;
 
-	char params[YAAMP_SMALLBUFSIZE];
+	char params[1088];
 	snprintf(params, sizeof(params), "[\"%s\"]", coind->wallet);
 
-	json_value *json = rpc_call(&coind->rpc, "validateaddress", params);
+	YAAMP_RPC *rpc = coind->rpc_wallet.port ? &coind->rpc_wallet : &coind->rpc;
+	json_value *json = rpc_call(rpc, "validateaddress", params);
 	if(!json) return false;
 
 	json_value *json_result = json_get_object(json, "result");
@@ -127,10 +127,27 @@ bool coind_validate_address(YAAMP_COIND *coind)
 	if (!base58_decode(coind->wallet, coind->script_pubkey))
 		stratumlog("Warning: unable to base58 decode %s %s script pubkey\n", coind->symbol, coind->wallet);
 
-	// Fallback or override with scriptPubKey from validateaddress if base58 decode did not produce a hash160
+	// Fallback when base58 decode did not produce a hash160 (e.g. Bech32 lbc1... pool wallet).
+	// lbcd returns witness_version/witness_program, bitcoind-style nodes return scriptPubKey,
+	// and lbcwallet may return neither.
 	if (!strlen(coind->script_pubkey)) {
 		const char *pk = json_get_string(json_result, "scriptPubKey");
-		if (pk && strlen(pk) == 50 && strncmp(pk, "76a914", 6) == 0) {
+		const char *wprog = json_get_string(json_result, "witness_program");
+		json_value *wver = json_get_val(json_result, "witness_version");
+		size_t wprog_len = wprog ? strlen(wprog) : 0;
+
+		if (wprog && wver && wver->type == json_integer && wprog_len >= 4 && wprog_len <= 80 && !(wprog_len & 1)
+			&& wver->u.integer >= 0 && wver->u.integer <= 16)
+		{
+			// Segwit scriptPubKey: OP_n <push len> <program>
+			int ver = (int)wver->u.integer;
+			unsigned int opver = ver ? (unsigned int)(0x50 + ver) : 0x00;
+			snprintf(coind->script_pubkey, sizeof(coind->script_pubkey), "%02x%02x%s",
+				opver, (unsigned int)(wprog_len >> 1), wprog);
+			coind->raw_script_pubkey = true;
+			coind->p2sh_address = false;
+			stratumlog("%s %s built witness scriptPubKey %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
+		} else if (pk && strlen(pk) == 50 && strncmp(pk, "76a914", 6) == 0) {
 			strncpy(coind->script_pubkey, pk + 6, 40);
 			coind->script_pubkey[40] = '\0';
 			stratumlog("%s %s extracted P2PKH hash160 is %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
@@ -139,7 +156,10 @@ bool coind_validate_address(YAAMP_COIND *coind)
 			coind->raw_script_pubkey = true;
 			stratumlog("%s %s extracted raw scriptPubKey is %s\n", coind->symbol, coind->wallet, coind->script_pubkey);
 		} else {
-			stratumlog("%s wallet addr '%s' script_pubkey could not be decoded\n", coind->symbol, coind->wallet);
+			stratumlog("ERROR: %s pool wallet '%s' script_pubkey could not be determined: validateaddress "
+				"returned neither witness_version/witness_program nor scriptPubKey. "
+				"Use a Base58 (b.../r...) pool wallet address instead.\n", coind->symbol, coind->wallet);
+			isvalid = false;
 		}
 	}
 	json_value_free(json);
@@ -150,7 +170,7 @@ bool coind_validate_address(YAAMP_COIND *coind)
 void coind_init(YAAMP_COIND *coind)
 {
 	char params[YAAMP_SMALLBUFSIZE];
-	char account[YAAMP_SMALLBUFSIZE];
+	char account[256];
 
 	yaamp_create_mutex(&coind->mutex);
 
@@ -164,10 +184,11 @@ void coind_init(YAAMP_COIND *coind)
 
 	snprintf(params, sizeof(params), "[\"%s\"]", account);
 
-	json_value *json = rpc_call(&coind->rpc, "getaccountaddress", params);
+	YAAMP_RPC *rpc = coind->rpc_wallet.port ? &coind->rpc_wallet : &coind->rpc;
+	json_value *json = rpc_call(rpc, "getaccountaddress", params);
 	if(!json)
 	{
-		json = rpc_call(&coind->rpc, "getaddressesbyaccount", params);
+		json = rpc_call(rpc, "getaddressesbyaccount", params);
 		if (json && json_is_array(json) && json->u.object.length) {
 			debuglog("is array...");
 			if (json->u.object.values[0].value->type == json_string)
@@ -179,7 +200,11 @@ void coind_init(YAAMP_COIND *coind)
 		}
 	}
 
-	if (json->u.object.values[0].value->type == json_string) {
+	json_value *json_res = json_get_val(json, "result");
+	if (json_res && json_res->type == json_string) {
+		snprintf(coind->wallet, sizeof(coind->wallet), "%s", json_res->u.string.ptr);
+	}
+	else if (json->u.object.length && json->u.object.values[0].value->type == json_string) {
 		snprintf(coind->wallet, sizeof(coind->wallet), "%s", json->u.object.values[0].value->u.string.ptr);
 	}
 	else {
@@ -201,8 +226,10 @@ void coind_terminate(YAAMP_COIND *coind)
 	debuglog("disconnecting from coind %s\n", coind->symbol);
 
 	rpc_close(&coind->rpc);
+	if (coind->rpc_wallet.port) rpc_close(&coind->rpc_wallet);
 #ifdef HAVE_CURL
 	if (coind->rpc.curl) rpc_curl_close(&coind->rpc);
+	if (coind->rpc_wallet.curl) rpc_curl_close(&coind->rpc_wallet);
 #endif
 
 	pthread_mutex_unlock(&coind->mutex);

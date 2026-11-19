@@ -100,16 +100,16 @@ foreach($list as $user)
 	echo '<td class="currency">'.$coinbalance.'</td>';
 
 	$balance = $user->balance ? bitcoinvaluetoa($user->balance) : '';
-	$total += (double) $user->balance;
+	$total += (float) $user->balance;
 	echo '<td class="currency">'.$balance.'</td>';
 
 	$immbalance = arraySafeVal($immature, $immkey, 0);
-	$totalimmat += (double) $immbalance;
+	$totalimmat += (float) $immbalance;
 	$immbalance = $immbalance ? bitcoinvaluetoa($immbalance) : '';
 	echo '<td class="currency">'.$immbalance.'</td>';
 
 	$failbalance = arraySafeVal($failed, $user->id, 0);
-	$totalfailed += (double) $failbalance;
+	$totalfailed += (float) $failbalance;
 	$failbalance = $failbalance ? bitcoinvaluetoa($failbalance) : '';
 	echo '<td class="currency red">'.$failbalance.'</td>';
 

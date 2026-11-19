@@ -3,9 +3,9 @@
  * YiiBase class file.
  *
  * @author Qiang Xue <qiang.xue@gmail.com>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  * @package system
  * @since 1.0
  */
@@ -54,6 +54,13 @@ defined('YII_ZII_PATH') or define('YII_ZII_PATH',YII_PATH.DIRECTORY_SEPARATOR.'z
 class YiiBase
 {
 	/**
+	 * @var array filters for autoloading mechanism.
+	 * It should be callable. For callable function autoloader pass className.
+	 * If filter function returns true Yii autoloader will be skipped.
+	 * @since 1.1.20
+	 */
+	public static $autoloaderFilters=array();
+	/**
 	 * @var array class map used by the Yii autoloading mechanism.
 	 * The array keys are the class names and the array values are the corresponding class file paths.
 	 * @since 1.1.5
@@ -80,7 +87,7 @@ class YiiBase
 	 */
 	public static function getVersion()
 	{
-		return '1.1.18';
+		return '1.1.32';
 	}
 
 	/**
@@ -401,6 +408,30 @@ class YiiBase
 	{
 		if(strstr($className, 'CAS_')) return false;
 
+		foreach (self::$autoloaderFilters as $filter)
+		{
+			if (is_array($filter)
+				&& isset($filter[0]) && isset($filter[1])
+				&& is_string($filter[0]) && is_string($filter[1])
+				&& true === call_user_func(array($filter[0], $filter[1]), $className)
+			)
+			{
+				return true;
+			}
+			elseif (is_string($filter)
+				&& true === call_user_func($filter, $className)
+			)
+			{
+				return true;
+			}
+			elseif (is_callable($filter)
+				&& true === $filter($className)
+			)
+			{
+				return true;
+			}
+		}
+
 		// use include so that the error PHP file may appear
 		if(isset(self::$classMap[$className]))
 			include(self::$classMap[$className]);
@@ -562,7 +593,7 @@ class YiiBase
 	 */
 	public static function powered()
 	{
-		return Yii::t('yii','Powered by {yii}.', array('{yii}'=>'<a href="http://www.yiiframework.com/" rel="external">Yii Framework</a>'));
+		return Yii::t('yii','Powered by {yii}.', array('{yii}'=>'<a href="https://www.yiiframework.com/" rel="external">Yii Framework</a>'));
 	}
 
 	/**
@@ -631,7 +662,7 @@ class YiiBase
 	 * Registers a new class autoloader.
 	 * The new autoloader will be placed before {@link autoload} and after
 	 * any other existing autoloaders.
-	 * @param callback $callback a valid PHP callback (function name or array($className,$methodName)).
+	 * @param callable $callback a valid PHP callback (function name or array($className,$methodName)).
 	 * @param boolean $append whether to append the new autoloader after the default Yii autoloader.
 	 * Be careful using this option as it will disable {@link enableIncludePath autoloading via include path}
 	 * when set to true. After this the Yii autoloader can not rely on loading classes via simple include anymore
@@ -816,6 +847,7 @@ class YiiBase
 		'CHttpCookie' => '/web/CHttpCookie.php',
 		'CHttpRequest' => '/web/CHttpRequest.php',
 		'CHttpSession' => '/web/CHttpSession.php',
+		'CHttpSessionHandler' => '/web/CHttpSessionHandler.php',
 		'CHttpSessionIterator' => '/web/CHttpSessionIterator.php',
 		'COutputEvent' => '/web/COutputEvent.php',
 		'CPagination' => '/web/CPagination.php',

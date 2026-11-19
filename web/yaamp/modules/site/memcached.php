@@ -20,19 +20,19 @@ function printStats($stat)
 	echo "<tr><td>Cumulative number of retrieval requests</td><td>".$stat["cmd_get"]."</td></tr>";
 	echo "<tr><td> Cumulative number of storage requests</td><td>".$stat["cmd_set"]."</td></tr>";
 
-	$percCacheHit=((real)$stat["get_hits"]/ (real)$stat["cmd_get"] *100);
+	$percCacheHit=((float)$stat["get_hits"] / max(1.0, (float)$stat["cmd_get"]) *100);
 	$percCacheHit=round($percCacheHit,3);
 	$percCacheMiss=100-$percCacheHit;
 
 	echo "<tr><td>Number of keys that have been requested and found</td><td>".$stat["get_hits"]." ($percCacheHit%)</td></tr>";
 	echo "<tr><td>Number of items that have been requested and not found</td><td>".$stat["get_misses"]." ($percCacheMiss%)</td></tr>";
 
-	$MBRead= (real)$stat["bytes_read"]/(1024*1024);
+	$MBRead= (float)$stat["bytes_read"]/(1024*1024);
 
 	echo "<tr><td>Total number of bytes read by this server from network</td><td>".$MBRead." MB</td></tr>";
-	$MBWrite=(real) $stat["bytes_written"]/(1024*1024) ;
+	$MBWrite=(float)$stat["bytes_written"]/(1024*1024) ;
 	echo "<tr><td>Total number of bytes sent by this server to network</td><td>".$MBWrite." MB</td></tr>";
-	$MBSize=(real) $stat["limit_maxbytes"]/(1024*1024) ;
+	$MBSize=(float)$stat["limit_maxbytes"]/(1024*1024) ;
 	echo "<tr><td>Size allowed to use for storage</td><td>".$MBSize." MB</td></tr>";
 	echo "<tr><td>Items removed from cache to free memory for new items</td><td>".$stat["evictions"]."</td></tr>";
 	echo "</table>";

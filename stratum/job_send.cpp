@@ -57,7 +57,7 @@ void job_send_last(YAAMP_CLIENT *client)
 
 	client->jobid_sent = job->id;
 
-	char buffer[YAAMP_SMALLBUFSIZE];
+	char buffer[YAAMP_SMALLBUFSIZE + 10*1024];
 	job_mining_notify_buffer(job, buffer, sizeof(buffer));
 
 	socket_send_raw(client->sock, buffer, strlen(buffer));
@@ -72,7 +72,7 @@ void job_send_jobid(YAAMP_CLIENT *client, int jobid)
 		return;
 	}
 
-	char buffer[YAAMP_SMALLBUFSIZE];
+	char buffer[YAAMP_SMALLBUFSIZE + 10*1024];
 	job_mining_notify_buffer(job, buffer, sizeof(buffer));
 
 	client->jobid_sent = job->id;
@@ -93,7 +93,7 @@ void job_broadcast(YAAMP_JOB *job)
 
 	YAAMP_JOB_TEMPLATE *templ = job->templ;
 
-	char buffer[YAAMP_SMALLBUFSIZE];
+	char buffer[YAAMP_SMALLBUFSIZE + 10*1024];
 	job_mining_notify_buffer(job, buffer, sizeof(buffer));
 
 	g_list_client.Enter();

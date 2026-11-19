@@ -68,11 +68,11 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 
 	if(hash_int <= coin_target)
 	{
-		char count_hex[8] = { 0 };
+		char count_hex[16] = { 0 };
 		if (templ->txcount <= 252)
-			sprintf(count_hex, "%02x", templ->txcount & 0xFF);
+			snprintf(count_hex, sizeof(count_hex), "%02x", templ->txcount & 0xFF);
 		else
-			sprintf(count_hex, "fd%02x%02x", templ->txcount & 0xFF, templ->txcount >> 8);
+			snprintf(count_hex, sizeof(count_hex), "fd%02x%02x", templ->txcount & 0xFF, (templ->txcount >> 8) & 0xFF);
 
 		memset(block_hex, 0, block_size);
 		sprintf(block_hex, "%s%s%s", submitvalues->header_be, count_hex, submitvalues->coinbase);

@@ -2,11 +2,11 @@ class YAAMP_COIND;
 
 struct YAAMP_JOB_VALUES
 {
-	char coinbase[4*1024];
+	char coinbase[8*1024 + 64];
 	char merkleroot_be[1024];
 
-	char header[1024];
-	char header_be[1024];
+	char header[2048];
+	char header_be[2048];
 	unsigned char header_bin[1024];
 
 	char hash_hex[1024];

@@ -6,6 +6,7 @@ if (!$coin) $this->goback();
 $PoS = ($coin->algo == 'PoS'); // or if 'stake' key is present in 'getinfo' method
 $DCR = ($coin->rpcencoding == 'DCR' || $coin->getOfficialSymbol() == 'DCR');
 $DGB = ($coin->rpcencoding == 'DGB' || $coin->getOfficialSymbol() == 'DGB');
+$LBC = ($coin->rpcencoding == 'LBC' || $coin->getOfficialSymbol() == 'LBC');
 $ETH = ($coin->rpcencoding == 'GETH');
 
 $remote = new WalletRPC($coin);
@@ -297,7 +298,7 @@ echo <<<end
 end;
 
 $account = '';
-if ($DCR || $DGB) $account = '*';
+if ($DCR || $DGB || $LBC) $account = '*';
 else if ($ETH) $account = $coin->master_wallet;
 
 $txs = $remote->listtransactions($account, $maxrows);
@@ -317,7 +318,7 @@ if (!empty($txs)) {
 	$tx = reset($txs);
 
 	if (count($txs) == $maxrows && isset($tx['time']))
-		$lastday = strftime('%F', $tx['time']);
+		$lastday = date('Y-m-d', $tx['time']);
 
 	if (!empty($txs)) foreach($txs as $tx)
 	{
@@ -394,7 +395,7 @@ if ($DCR) {
 		}
 		// for truncated day sums
 		if ($lastday == '' && count($txs) == $maxrows)
-			$lastday = strftime('%F', $tx['time']);
+			$lastday = date('Y-m-d', $tx['time']);
 	}
 	if ($info['version'] < 1010200)
 		ksort($txs_array); // was in reversed order
@@ -492,7 +493,7 @@ foreach($txs_array as $tx)
 {
 	if (!isset($tx['time'])) continue;
 
-	$day = strftime('%F', $tx['time']); // YYYY-MM-DD
+	$day = date('Y-m-d', $tx['time']); // YYYY-MM-DD
 	if ($day == $lastday) break; // do not show truncated days
 
 	$category = $tx['category'];

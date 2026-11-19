@@ -19,6 +19,7 @@ static void hexlify(char *hex, const unsigned char *bin, int len)
 
 void lbry_hash(const char* input, char* output, uint32_t len)
 {
+	(void)len;
 	uint32_t hashA[16];
 	uint32_t hashB[8];
 	uint32_t hashC[8];

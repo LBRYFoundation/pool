@@ -161,8 +161,8 @@ foreach($algos as $item)
 	$style = '';
 	if ($btcmhday1 != '-')
 	{
-		$avgprice = (double) $avgprice;
-		$btcmhd = (double) $btcmhday1;
+		$avgprice = (float) $avgprice;
+		$btcmhd = (float) $btcmhday1;
 
 		if($btcmhd > $avgprice*1.1)
 			$style = 'color: white; background-color: #5cb85c;';
@@ -275,7 +275,7 @@ if (YAAMP_ALLOW_EXCHANGE) {
 
 		echo '<td align="right">'.($onsell == 0 ? '-' : $onsell).'</td>';
 
-		$total_onsell += (double) $onsell;
+		$total_onsell += (float) $onsell;
 	}
 
 }

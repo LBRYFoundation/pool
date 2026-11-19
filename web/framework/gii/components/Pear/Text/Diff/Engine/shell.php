@@ -7,10 +7,10 @@
  *
  * $Horde: framework/Text_Diff/Diff/Engine/shell.php,v 1.6.2.4 2009/01/06 15:23:41 jan Exp $
  *
- * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
+ * Copyright 2007-2009 The Horde Project (https://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (LGPL). If you did
- * not receive this file, see http://opensource.org/licenses/lgpl-license.php.
+ * not receive this file, see https://opensource.org/licenses/lgpl-license.php.
  *
  * @author  Milian Wolff <mail@milianw.de>
  * @package Text_Diff
@@ -85,7 +85,7 @@ class Text_Diff_Engine_shell {
 
             if ($from_line_no < $match[1] || $to_line_no < $match[4]) {
                 // copied lines
-                assert('$match[1] - $from_line_no == $match[4] - $to_line_no');
+                assert($match[1] - $from_line_no == $match[4] - $to_line_no);
                 array_push($edits,
                     new Text_Diff_Op_copy(
                         $this->_getLines($from_lines, $from_line_no, $match[1] - 1),

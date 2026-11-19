@@ -4,80 +4,7 @@ function yaamp_get_algos()
 {
 	/* Toggle Site Algos Here */
 	return array(
-		'sha256',
-		'sha256t',
-		'sha256q',
-		'scrypt',
-		'scryptn',
-		'allium',
-		'argon2',
-		'argon2d-dyn',
-		'aergo',
-		'bastion',
-		'bitcore',
-		'blake',
-		'blakecoin',
-		'blake2s',
-		'blake2b',
-		'decred',
-		'deep',
-		'exosis',
-		'hmq1725',
-		'keccak',
-		'keccakc',
-		'jha',
-		'hex',
-		'hsr',
 		'lbry',
-		'lbk3',
-		'luffa',
-		'lyra2',
-		'lyra2v2',
-		'lyra2v3',
-		'lyra2z',
-		'lyra2zz',
-		'neoscrypt',
-		'nist5',
-		'penta',
-		'polytimos',
-		'quark',
-		'qubit',
-		'rainforest',
-		'c11',
-		'x11',
-		'x11evo',
-		'x12',
-		'x13',
-		'x14',
-		'x15',
-		'x16r',
-		'x16rv2',
-		'x16s',
-		'x17',
-		'x22i',
-		'xevan',
-		'groestl', // dmd-gr -m 256 (deprecated)
-		'dmd-gr',
-		'myr-gr',
-		'm7m',
-		'phi',
-		'phi2',
-		'sib',
-		'skein',
-		'skein2',
-		'skunk',
-		'timetravel',
-		'tribus',
-		'a5a',
-		'vanilla',
-		'veltor',
-		'velvet',
-		'vitalium',
-		'yescrypt',
-		'yescryptR16',
-		'yescryptR32',
-		'whirlpool',
-		'zr5',
 	);
 }
 
@@ -494,7 +421,7 @@ function yaamp_user_rate_bad($userid, $algo=null)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_user_diff_avg-$userid-$algo",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_user_diff_avg-$userid-$algo",
 		"SELECT avg(difficulty) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo", array(':algo'=>$algo));
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_user_rate_bad-$userid-$algo",
@@ -525,7 +452,7 @@ function yaamp_worker_rate_bad($workerid, $algo=null)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
 		"SELECT avg(difficulty) FROM shares WHERE valid AND time>$delay AND workerid=".$workerid);
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_worker_rate_bad-$workerid-$algo",
@@ -599,7 +526,7 @@ function yaamp_job_rate_bad($jobid)
 	$interval = yaamp_hashrate_step();
 	$delay = time()-$interval;
 
-	$diff = (double) controller()->memcache->get_database_scalar("yaamp_job_diff_avg-$jobid",
+	$diff = (float) controller()->memcache->get_database_scalar("yaamp_job_diff_avg-$jobid",
 		"SELECT avg(difficulty) FROM jobsubmits WHERE valid AND time>$delay AND jobid=".$jobid);
 
 	$rate = controller()->memcache->get_database_scalar("yaamp_job_rate_bad-$jobid",
@@ -621,7 +548,7 @@ function yaamp_pool_rate_pow($algo=null)
 	$rate = controller()->memcache->get_database_scalar("yaamp_pool_rate_pow-$algo",
 		"SELECT sum(shares.difficulty) * $target / $interval / 1000 FROM shares, coins
 			WHERE shares.valid AND shares.time>$delay AND shares.algo=:algo AND
-			shares.coinid=coins.id AND coins.rpcencoding='POW'", array(':algo'=>$algo));
+			shares.coinid=coins.id AND coins.rpcencoding IN ('POW','LBC')", array(':algo'=>$algo));
 
 	return $rate;
 }

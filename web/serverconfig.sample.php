@@ -41,58 +41,27 @@ define('YAAMP_DEFAULT_ALGO', 'lbry');
 define('YAAMP_CREATE_NEW_COINS', false);
 
 
-define('YAAMP_USE_NGINX', false);
+define('YAAMP_USE_NGINX', true);
 
-// Exchange public keys (private keys are in a separate config file)
-define('EXCH_CRYPTOPIA_KEY', '');
-define('EXCH_POLONIEX_KEY', '');
-define('EXCH_BITTREX_KEY', '');
-define('EXCH_BLEUTRADE_KEY', '');
-define('EXCH_YOBIT_KEY', '');
-define('EXCH_CCEX_KEY', '');
-define('EXCH_CEXIO_ID', '');
-define('EXCH_CEXIO_KEY', '');
-define('EXCH_COINMARKETS_USER', '');
-define('EXCH_COINMARKETS_PIN', '');
-define('EXCH_CREX24_KEY', '');
-define('EXCH_BINANCE_KEY', '');
-define('EXCH_BITSTAMP_ID','');
-define('EXCH_BITSTAMP_KEY','');
-define('EXCH_HITBTC_KEY','');
-define('EXCH_KRAKEN_KEY', '');
-define('EXCH_KUCOIN_KEY', '');
-define('EXCH_LIVECOIN_KEY', '');
-define('EXCH_NOVA_KEY', '');
-define('EXCH_STOCKSEXCHANGE_KEY', '');
+define('LBC_DAEMON_HOST', '127.0.0.1');
+define('LBC_DAEMON_PORT', 9245);
+define('LBC_DAEMON_SSL', false);
+define('LBC_DAEMON_CERT', '');
 
-// Automatic withdraw to Yaamp btc wallet if btc balance > 0.3
-define('EXCH_AUTO_WITHDRAW', 0.3);
-
-// nicehash keys deposit account & amount to deposit at a time
-define('NICEHASH_API_KEY','521c254d-8cc7-4319-83d2-ac6c604b5b49');
-define('NICEHASH_API_ID','9205');
-define('NICEHASH_DEPOSIT','3J9tapPoFCtouAZH7Th8HAPsD8aoykEHzk');
-define('NICEHASH_DEPOSIT_AMOUNT','0.01');
-
-
-$cold_wallet_table = array(
-	'1C23KmLeCaQSLLyKVykHEUse1R7jRDv9j9' => 0.10,
-);
+$cold_wallet_table = array();
 
 // Sample fixed pool fees
 $configFixedPoolFees = array(
-        'zr5' => 2.0,
-        'scrypt' => 20.0,
-        'sha256' => 5.0,
+//	'lbry' => 0.5,
 );
 
 // Sample custom stratum ports
 $configCustomPorts = array(
-//	'x11' => 7000,
+//	'lbry' => 3334,
 );
 
 // mBTC Coefs per algo (default is 1.0)
 $configAlgoNormCoef = array(
-//	'x11' => 5.0,
+//	'lbry' => 1.0,
 );
 

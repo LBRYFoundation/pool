@@ -130,13 +130,10 @@ function showSellAmountDialog(marketname, address, marketid, bookmarkid)
 
 		buttons:
 		{
-			"Send / Sell": function()
+			"Send": function()
 			{
 				amount = $('#input_sell_amount').val();
-				if (marketid > 0)
-					window.location.href = '/market/sellto?id='+marketid+'&amount='+amount;
-				else
-					window.location.href = '/site/bookmarkSend?id='+bookmarkid+'&amount='+amount;
+				window.location.href = '/site/bookmarkSend?id='+bookmarkid+'&amount='+amount;
 			},
 		}
 	});
@@ -155,10 +152,5 @@ Amount: <input type=text id="input_sell_amount" value="$sellamount">
 END;
 
 JavascriptReady("main_refresh();");
-
-if ($coin->watch) {
-	$this->renderPartial('coin_market_graph', array('coin'=>$coin));
-	JavascriptReady("$(window).resize(graph_resized);");
-}
 
 //////////////////////////////////////////////////////////////////////////////////////

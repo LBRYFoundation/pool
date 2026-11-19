@@ -91,21 +91,21 @@ class Escaper
      * is set for htmlspecialchars() calls.
      *
      * @param string $encoding
-     * @throws Exception\InvalidArgumentException
+     * @throws Exception
      */
     public function __construct($encoding = null)
     {
         if ($encoding !== null) {
             $encoding = (string) $encoding;
             if ($encoding === '') {
-                throw new Exception\InvalidArgumentException(
+                throw new Exception(
                     get_class($this) . ' constructor parameter does not allow a blank value'
                 );
             }
 
             $encoding = strtolower($encoding);
             if (!in_array($encoding, $this->supportedEncodings)) {
-                throw new Exception\InvalidArgumentException(
+                throw new Exception(
                     'Value of \'' . $encoding . '\' passed to ' . get_class($this)
                     . ' constructor parameter is invalid. Provide an encoding supported by htmlspecialchars()'
                 );
@@ -251,8 +251,8 @@ class Escaper
 
         $hex = bin2hex($chr);
         $ord = hexdec($hex);
-        if (isset(static::$htmlNamedEntityMap[$ord])) {
-            return '&' . static::$htmlNamedEntityMap[$ord] . ';';
+        if (isset(self::$htmlNamedEntityMap[$ord])) {
+            return '&' . self::$htmlNamedEntityMap[$ord] . ';';
         }
 
         /**
@@ -269,6 +269,10 @@ class Escaper
      * Callback function for preg_replace_callback that applies Javascript
      * escaping to all matches.
      *
+     * Replaced original ZEND implementation with implementation from laminas/laminas-escaper
+     * @see https://github.com/laminas/laminas-escaper/blob/2.7.x/src/Escaper.php#L276
+     * @see https://github.com/yiisoft/yii/issues/4301
+     *
      * @param array $matches
      * @return string
      */
@@ -279,7 +283,13 @@ class Escaper
             return sprintf('\\x%02X', ord($chr));
         }
         $chr = $this->convertEncoding($chr, 'UTF-16BE', 'UTF-8');
-        return sprintf('\\u%04s', strtoupper(bin2hex($chr)));
+        $hex = strtoupper(bin2hex($chr));
+        if (strlen($hex) <= 4) {
+            return sprintf('\\u%04s', $hex);
+        }
+        $highSurrogate = substr($hex, 0, 4);
+        $lowSurrogate = substr($hex, 4, 4);
+        return sprintf('\\u%04s\\u%04s', $highSurrogate, $lowSurrogate);
     }
 
     /**
@@ -306,7 +316,7 @@ class Escaper
      * class' constructor.
      *
      * @param string $string
-     * @throws Exception\RuntimeException
+     * @throws Exception
      * @return string
      */
     protected function toUtf8($string)
@@ -318,7 +328,7 @@ class Escaper
         }
 
         if (!$this->isUtf8($result)) {
-            throw new Exception\RuntimeException(
+            throw new Exception(
                 sprintf('String to be escaped was not valid UTF-8 or could not be converted: %s', $result)
             );
         }
@@ -359,7 +369,7 @@ class Escaper
      * @param string $string
      * @param string $to
      * @param array|string $from
-     * @throws Exception\RuntimeException
+     * @throws Exception
      * @return string
      */
     protected function convertEncoding($string, $to, $from)
@@ -369,7 +379,7 @@ class Escaper
         } elseif (function_exists('mb_convert_encoding')) {
             $result = mb_convert_encoding($string, $to, $from);
         } else {
-            throw new Exception\RuntimeException(
+            throw new Exception(
                 get_class($this)
                 . ' requires either the iconv or mbstring extension to be installed'
                 . ' when escaping for non UTF-8 strings.'

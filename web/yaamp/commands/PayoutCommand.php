@@ -135,10 +135,11 @@ class PayoutCommand extends CConsoleCommand
 
 		$DCR = ($coin->rpcencoding == 'DCR' || $coin->getOfficialSymbol() == 'DCR');
 		$DGB = ($coin->rpcencoding == 'DGB' || $coin->getOfficialSymbol() == 'DGB');
+		$LBC = ($coin->rpcencoding == 'LBC' || $coin->getOfficialSymbol() == 'LBC');
 
 		$remote = new WalletRPC($coin);
 		$account = '';
-		if ($DCR || $DGB) $account = '*';
+		if ($DCR || $DGB || $LBC) $account = '*';
 		$rawtxs = $remote->listtransactions($account, 25000);
 
 		foreach ($ids as $uid => $user_addr)
@@ -160,7 +161,7 @@ class PayoutCommand extends CConsoleCommand
 			));
 			if (empty($payouts)) $payouts = array();
 
-			echo "$user_addr payouts since ".strftime('%F %c', $since).": ".count($payouts)."\n";
+			echo "$user_addr payouts since ".date('Y-m-d H:i:s', $since).": ".count($payouts)."\n";
 
 			// filter user raw transactions
 			foreach ($rawtxs as $ntx => $tx) {
@@ -205,12 +206,12 @@ class PayoutCommand extends CConsoleCommand
 							$user->save();
 						}
 						$match = true;
-						$time = strftime('%F %c', $time);
+						$time = date('Y-m-d H:i:s', $time);
 						echo "extra user tx $txid $time $amount $symbol\n";
 					}
 				}
 				//if (0 && !$match && arraySafeVal($tx,'category') == 'send') {
-				//	$time = strftime('%F %c', $time);
+				//	$time = date('Y-m-d H:i:s', $time);
 				//	$txid = arraySafeVal($tx,'txid');
 				//	$amount = abs(arraySafeVal($tx,'amount'));
 				//	$address = arraySafeVal($tx,'address');
@@ -227,7 +228,7 @@ class PayoutCommand extends CConsoleCommand
 			if ($totaldiff > 0.0) {
 				// search payouts not in db
 				foreach ($payouts as $payout) {
-					$time = strftime('%F %c', $payout->time);
+					$time = date('Y-m-d H:i:s', $payout->time);
 					echo "extra db tx: $time {$payout->tx} {$payout->amount} $symbol\n";
 				}
 			}
@@ -363,7 +364,7 @@ class PayoutCommand extends CConsoleCommand
 		foreach ($data as $row) {
 			$txid = $row['tx'];
 			$tx = $remote->gettransaction($txid);
-			echo strftime('%Y-%m-%d %H:%M', $row['time'])." $txid ".$tx['confirmations'].
+			echo date('Y-m-d H:i', $row['time'])." $txid ".$tx['confirmations'].
 				" confs (".altcoinvaluetoa($row['amount'],4)." $symbol, fees: ".bitcoinvaluetoa($tx['fee']).")\n";
 		}
 	}

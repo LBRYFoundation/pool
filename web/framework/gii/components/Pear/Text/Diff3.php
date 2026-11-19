@@ -4,10 +4,10 @@
  *
  * $Horde: framework/Text_Diff/Diff3.php,v 1.2.10.7 2009/01/06 15:23:41 jan Exp $
  *
- * Copyright 2007-2009 The Horde Project (http://www.horde.org/)
+ * Copyright 2007-2009 The Horde Project (https://www.horde.org/)
  *
  * See the enclosed file COPYING for license information (LGPL). If you did
- * not receive this file, see http://opensource.org/licenses/lgpl-license.php.
+ * not receive this file, see https://opensource.org/licenses/lgpl-license.php.
  *
  * @package Text_Diff
  * @since   0.3.0
@@ -194,7 +194,7 @@ class Text_Diff3_Op {
  */
 class Text_Diff3_Op_copy extends Text_Diff3_Op {
 
-    function Text_Diff3_Op_Copy($lines = false)
+    function __construct($lines = false)
     {
         $this->orig = $lines ? $lines : array();
         $this->final1 = &$this->orig;

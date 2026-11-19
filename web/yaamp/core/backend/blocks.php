@@ -97,7 +97,7 @@ function BackendBlockFind1($coinid = NULL)
 			continue;
 		}
 		if(!$coin->enable) continue;
-		if($coin->rpcencoding == 'DCR' && !$coin->auto_ready) continue;
+		if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && !$coin->auto_ready) continue;
 			
 		$dblock = getdbosql('db_blocks', "coin_id=:coinid AND blockhash=:hash AND height=:height AND id!=:blockid",
 			array(':coinid'=>$coin->id, ':hash'=>$db_block->blockhash, ':height'=>$db_block->height, ':blockid'=>$db_block->id)
@@ -114,8 +114,8 @@ function BackendBlockFind1($coinid = NULL)
 
 		$block = $remote->getblock($db_block->blockhash);
 		$block_age = time() - $db_block->time;
-		if($coin->rpcencoding == 'DCR' && $block_age < 2000) {
-			// DCR generated blocks need some time to be accepted by the network (gettransaction)
+		if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && $block_age < 2000) {
+			// DCR/LBC generated blocks need some time to be indexed by the wallet (gettransaction)
 			if (!$block) continue;
 			$txid = $block['tx'][0];
 			$tx = $remote->gettransaction($txid);
@@ -215,8 +215,8 @@ function BackendBlocksUpdate($coinid = NULL)
 		if(!$tx && $block->category != 'orphan') {
 			if ($coin->enable) {
 				debuglog("{$coin->name} unable to find {$block->category} block {$block->height} tx {$block->txhash}!");
-				// DCR orphaned confirmations are not(no more) -1!
-				if($coin->rpcencoding == 'DCR' && $block->category == 'immature' && $coin->auto_ready) {
+				// DCR/LBC (lbcwallet) removes orphaned coinbase txs from wtxmgr rather than returning confirmations=-1
+				if(in_array($coin->rpcencoding, array('DCR', 'LBC')) && $block->category == 'immature' && $coin->auto_ready) {
 					$blockext = $remote->getblock($block->blockhash);
 					$conf = arraySafeVal($blockext,'confirmations',-1);
 					if ($conf == -1 || ($conf > 2 && arraySafeVal($blockext,'nextblockhash','') == '')) {
@@ -225,6 +225,7 @@ function BackendBlocksUpdate($coinid = NULL)
 						$block->amount = 0;
 						$block->category = 'orphan';
 						$block->save();
+						dborun("DELETE FROM earnings WHERE blockid=".intval($block->id)." AND status!=-1");
 						continue;
 					}
 				}
@@ -232,6 +233,7 @@ function BackendBlocksUpdate($coinid = NULL)
 			else if ((time() - $block->time) > (7 * 24 * 3600)) {
 				debuglog("{$coin->name} outdated immature block {$block->height} detected!");
 				$block->category = 'orphan';
+				dborun("DELETE FROM earnings WHERE blockid=".intval($block->id)." AND status!=-1");
 			}
 			$block->save();
 			continue;
@@ -422,10 +424,10 @@ function BackendUpdatePoolBalances($coinid = NULL)
 	$coins = getdbolist('db_coins', $sqlFilter);
 	foreach($coins as $coin)
 	{
-		$coin->immature = (double) dboscalar("SELECT SUM(amount) FROM blocks WHERE category='immature' AND coin_id=".intval($coin->id));
-		$coin->cleared = (double) dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid=".intval($coin->id));
-		$pending = (double) dboscalar("SELECT SUM(amount) FROM earnings WHERE status=1 AND coinid=".intval($coin->id)); // (to be cleared)
-		$coin->available = (double) $coin->balance - $coin->cleared - $pending;
+		$coin->immature = (float) dboscalar("SELECT SUM(amount) FROM blocks WHERE category='immature' AND coin_id=".intval($coin->id));
+		$coin->cleared = (float) dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid=".intval($coin->id));
+		$pending = (float) dboscalar("SELECT SUM(amount) FROM earnings WHERE status=1 AND coinid=".intval($coin->id)); // (to be cleared)
+		$coin->available = (float) $coin->balance - $coin->cleared - $pending;
 		//if ($pending) debuglog("{$coin->symbol} immature {$coin->immature}, cleared {$coin->cleared}, pending {$pending}, available {$coin->available}");
 		$coin->save();
 	}
@@ -435,42 +437,4 @@ function BackendUpdatePoolBalances($coinid = NULL)
 	//debuglog(__FUNCTION__." took ".round($d1,3)." sec");
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////
-
-function MonitorBTC()
-{
-//	debuglog(__FUNCTION__);
-
-	$coin = getdbosql('db_coins', "symbol='BTC'");
-	if(!$coin) return;
-
-	$remote = new WalletRPC($coin);
-	if(!$remote) return;
-
-	$mostrecent = 0;
-	if($coin->lastblock == null) $coin->lastblock = '';
-	$list = $remote->listsinceblock($coin->lastblock);
-	if(!$list) return;
-
-	$coin->lastblock = $list['lastblock'];
-	$coin->save();
-
-	foreach($list['transactions'] as $transaction)
-	{
-		if(!isset($transaction['blockhash'])) continue;
-		if($transaction['confirmations'] == 0) continue;
-		if($transaction['category'] != 'send') continue;
-		//if($transaction['fee'] != -0.0001) continue;
-
-		debuglog(__FUNCTION__);
-		debuglog($transaction);
-
-		$txurl = "https://blockchain.info/tx/{$transaction['txid']}";
-
-		$b = mail(YAAMP_ADMIN_EMAIL, "withdraw {$transaction['amount']}",
-			"<a href='$txurl'>{$transaction['address']}</a>");
-
-		if(!$b) debuglog('error sending email');
-	}
-}
 

@@ -17,7 +17,7 @@ vector<string> merkle_steps(vector<string> input)
 			L.push_back(L[L.size() - 1]);
 
 		vector<string> Ld;
-		for(int i = 1; i < L.size()/2; i++)
+		for(size_t i = 1; i < L.size()/2; i++)
 		{
 			string s = L[i*2] + L[i*2+1];
 
@@ -64,7 +64,7 @@ string merkle_with_first(vector<string> steps, string f)
 //            f = doublesha(f + s)
 //        return f
 
-int test_merkle()
+void test_merkle()
 {
 	vector<string> hash;
 	hash.push_back("");
@@ -77,7 +77,6 @@ int test_merkle()
 	string mr = merkle_with_first(res, "d43b669fb42cfa84695b844c0402d410213faa4f3e66cb7248f688ff19d5e5f7");
 
 	printf("mr: %s\n", mr.c_str());		// 82293f182d5db07d08acf334a5a907012bbb9990851557ac0ec028116081bd5a
-
 }
 
 

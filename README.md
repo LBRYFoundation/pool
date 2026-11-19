@@ -1,91 +1,145 @@
 # Lbry Mining Pool based on Yiimp
 # Home Codebase of [LBRYPool](https://lbrypool.net)
 
-
-### TODO: Rewrite this README, Rewrite Install Script to be more logical, Do it all again to document the hax. Be sure to rewrite things to use TMUX and document as such.
-
+An LBC-only mining pool: the yiimp web front-end (Yii 1.1.32 on PHP 8.x), the
+`lbry` algo stratum server, and [lbcd](https://github.com/lbryio/lbcd) +
+[lbcwallet](https://github.com/lbryio/lbcwallet).
 
 ## Prerequisites:
-1. Ubuntu 18.04
-2. Install Script (Provided in this repo)
+1. Ubuntu 22.04, 24.04, or 26.04 (amd64 or arm64)
+2. A domain name pointed at the server (for LetsEncrypt SSL)
+3. Install Script (Provided in this repo)
 
 WARNINGS
 - Use at your own risks.
 
-The install Script will install the pool and all dependencies needed.
+The install script installs the pool and all dependencies, always fetching the
+newest releases: distribution PHP 8.x, MariaDB, Nginx, the latest Go toolchain
+(checksum-verified from go.dev) and the latest lbcd/lbcwallet GitHub releases
+(checksum-verified against the release `checksums.txt`).
 
 TO INSTALL:
-1. Log in to your server
-2. Create new user - sudo adduser (username)
-3. Add user to sudo group - sudo adduser (username) sudo
-4. Log in to new user - sudo su (username)
-5. cd ~/
-6. `wget https://raw.githubusercontent.com/lbryio/pool/next/install.sh && chmod +x install.sh && ./install.sh`
-7. Follow the instructions on the screen.
-8. sudo bash pool-start.sh
+1. Log in to your server (as `root` or a user with `sudo` rights)
+2. `git clone https://github.com/LBRYFoundation/pool.git && cd pool`
+   (add `--branch <branch>` to test a branch)
+3. `./install.sh` (or `./install.sh -p <wallet-passphrase>` if reusing an existing encrypted `lbcwallet`)
+4. Follow the instructions on the screen.
 
-This will setup the pool ready for coin daemons to be added.
+Optional environment overrides (e.g. `PHP_VERSION=8.4 ./install.sh`):
 
-You can find sample config files in web/serverconfig.sample.php and web/keys.sample.php
+| Variable / Flag | Effect |
+|---|---|
+| `-p <pass>` / `--wallet-passphrase <pass>` / `LBC_WALLET_PASS` | passphrase for a pre-existing `lbcwallet` (written to `lbcwallet.conf` and used to unlock the wallet via RPC on start) |
+| `PHP_VERSION` | install that PHP version from `ppa:ondrej/php` instead of the distribution's PHP 8.x |
+| `LBCD_VERSION` / `LBCWALLET_VERSION` | pin a release tag, e.g. `v0.22.119` (default: latest) |
+| `GO_VERSION` | pin the Go toolchain, e.g. `go1.27.4` (default: latest stable) |
+| `POOL_REPO` / `POOL_BRANCH` | what to clone when `install.sh` is run outside a checkout |
 
+The installer can be re-run (e.g. to upgrade lbcd/lbcwallet/PHP): answers are kept
+in `install.conf` and generated passwords in `~/.lbcpool-secrets`.
 
-You need at least three backend shells (in tmux) running these scripts:
+## Upgrading a pool installed with the original installer
 
-	web/main.sh
-	web/loop2.sh
-	web/block.sh
-	
-This is done running the pool-start.sh script in the home folder.
+Stop the old processes (tmux/screen sessions, `lbrycrdd`), then run `./install.sh`
+from a checkout of this repository. The installer detects the existing install and:
 
-Now you will need to edit the coin in the admin panel, this will be http://IP/site/ADMIN_ADDRESS_USED_WHILE_INSTALLING then go to Coins on the headers, Find LBRY Credits and click LBC.
+- reuses the answers from `~/install.conf` and pre-fills the existing custom admin path;
+- keeps the database, applies the new `sql/2026-*` migrations, and repoints the LBC
+  coin record from lbrycrdd to lbcwallet;
+- keeps the existing pool address only if the new lbcwallet owns it; otherwise it
+  requests a new one;
+- carries over operator settings from `serverconfig.php` (site name, fees, payout
+  settings, stratum URL, fee/port tables) and the stratum `difficulty`/`max_ttf`;
+- backs up every config file it rewrites as `<file>.bak-<timestamp>`;
+- switches the `php` CLI to PHP 8 if an older PHP is still selected.
 
-Here you need to do the following:
-1. Edit algo to lbry
-2. Edit image to /images/coin-LBRY.png
-3. Edit Daemon information to the following:
-4. process name - lbrycrdd
-5. Conf.folder - .lbrycrd
-6. RPC Host - 127.0.0.1
-7. RPC User - This is the Username at the end of the install script. 
-8. RPC Password - This is the Password at the end of the install script.
-9. RPC Type - POW
-10. Edit Settings and tick the following boxes:
-11. Enable
-12. Auto Ready
-13. Visable
-14. Installed
-15. Click Save
+**Wallet cutover:** the original pool used the lbrycrdd wallet, which lbcwallet cannot
+see. Before upgrading, let found blocks mature (stop stratum ~100 blocks / ~4 hours
+before the cutover); otherwise lbcwallet cannot confirm them, and they are marked
+orphan after 7 days. After upgrading, fund the new pool wallet from the old lbrycrdd
+wallet before payouts run. The installer shows the number of immature blocks and the
+unpaid balances and asks for confirmation. `~/.lbrycrd` is left untouched.
 
-Once you have clicked save, you need to restart the lbry daemon in the VPS:
-1. lbrycrd-cli stop
-2. lbrycrdd -daemon
+## What gets installed
 
-At the moment you will find other wallets active, you can click the install tick box on all of the ones that you are not using. I will update this at some point to remove them when installing.
+| Component | Details |
+|---|---|
+| `lbcd` | LBRY full node, RPC on `127.0.0.1:9245` (localhost only, no TLS), P2P port 9246 |
+| `lbcwallet` | Pool wallet, RPC on `127.0.0.1:9244`; proxies chain RPCs to lbcd |
+| `stratum` | Stratum server on port 3334 (`/var/stratum`, config `/var/stratum/config/lbry.conf`) |
+| `blocknotify` | `blocknotify-dcr`: subscribes to lbcd block notifications and notifies stratum |
+| `main`, `loop2`, `blocks` | Web backend loops (`web/main.sh`, `loop2.sh`, `blocks.sh`) |
+| `debug` | `tail -F /var/log/yiimp/debug.log` |
+| Database | MariaDB database `yiimpfrontend` with users `panel` (web) and `stratum` |
 
-On the website, go to http://server.com/site/adminRights to login as admin. You have to change it to something different in the code (web/yaamp/modules/site/SiteController.php). A real admin login may be added later, but you can setup a password authentification with your web server, sample for lighttpd:
+The installer also creates the LBC coin record (algo `lbry`, RPC pointing at
+lbcwallet), creates the pool wallet and requests a Base58 (legacy) pool address,
+so no manual coin setup is needed in the admin panel.
 
-	htpasswd -c /etc/yiimp/admin.htpasswd <adminuser>
+## Running the pool
 
-and in the lighttpd config file:
+The pool processes are **not** systemd services. Each runs in its own tmux
+session (in root's tmux server), so nothing restarts them behind your back and
+nothing starts at boot. If a process exits, its session stays open and shows the
+exit code.
 
-	# Admin access
-	$HTTP["url"] =~ "^/site/adminRights" {
-	        auth.backend = "htpasswd"
-	        auth.backend.htpasswd.userfile = "/etc/yiimp/admin.htpasswd"
-	        auth.require = (
-	                "/" => (
-	                        "method" => "basic",
-	                        "realm" => "Yiimp Administration",
-	                        "require" => "valid-user"
-	                )
-	        )
+	sudo ~/pool-start.sh                 # start everything, in dependency order
+	sudo ~/pool-start.sh chain           # only lbcd + lbcwallet
+	sudo ~/pool-start.sh stratum web     # individual components
+	sudo tmux ls                         # list sessions
+	sudo tmux attach -t lbcd             # watch a process (detach: Ctrl-b d)
+	sudo ~/pool-stop.sh                  # graceful stop of everything (lbcd last)
+	sudo ~/pool-stop.sh stratum          # stop one component
+
+Components: `all`, `chain`, `lbcd`, `lbcwallet`, `stratum`, `blocknotify`, `web`, `debug`.
+`pool-stop.sh` sends Ctrl-C and waits; lbcd (up to 10 min) and lbcwallet are
+never force-killed, to avoid database corruption.
+
+At the end of the install only lbcd and lbcwallet are running (needed for the
+pool wallet address). Start the rest with `sudo ~/pool-start.sh` when ready.
+
+After installing:
+- Summary and credentials: `~/pool-credentials.txt`
+- Wallet seed: `~/lbcwallet-seed.txt` - back it up offline, then delete the file
+- Chain sync progress: `lbcctl getblockchaininfo` (stratum serves jobs once lbcd is synced)
+- Wallet: `lbcctl --wallet getbalance`
+
+## Database migrations
+
+Existing pools must apply the migrations in `sql/` that are newer than their
+schema, in date order, e.g.:
+
+	mysql --defaults-group-suffix=host1 < sql/2026-11-04-lbc_stratum_widths.sql
+	mysql --defaults-group-suffix=host1 < sql/2026-11-15-lbc_seed.sql
+
+The stratum server checks the schema at startup and refuses to start (with a
+message naming the migration) if tables/columns are missing or too narrow for
+Bech32 (`lbc1...`) miner addresses.
+
+## Admin access
+
+On the website, go to http://server.com/site/ADMIN_PANEL (the path chosen during
+install) to log in as admin; access is limited to the IPs entered during install
+(`YAAMP_ADMIN_IP` in `/var/web/serverconfig.php`). You can add password
+authentication in Nginx as well:
+
+	sudo apt install apache2-utils
+	sudo htpasswd -c /etc/nginx/admin.htpasswd <adminuser>
+
+and in the site config (`/etc/nginx/sites-available/<server>.conf`):
+
+	location ^~ /site/ADMIN_PANEL {
+	        auth_basic "Yiimp Administration";
+	        auth_basic_user_file /etc/nginx/admin.htpasswd;
+	        try_files $uri /index.php?$args;
 	}
 
-And finally remove the IP filter check in SiteController.php
+## Logs
 
-
-
-There are logs generated in the /var/stratum folder and /var/log/stratum/debug.log for the php log.
+- Stratum: `/var/stratum/config/stratum.log`, `lbry.log`, `client.log`, `reject.log`
+- Web backend: `/var/log/yiimp/debug.log`
+- lbcd / lbcwallet: `/var/lib/lbc/.lbcd/logs`, `/var/lib/lbc/.lbcwallet/logs`
+- Live output of any process: `sudo tmux attach -t <session>`
 
 More instructions coming as needed.
 
@@ -96,4 +150,3 @@ Thanks to globalzon to have released the initial Yaamp source code.
 Thanks to tpruvot for updating the source code to yiimp.
 Thanks to oakey22 for customising this for Lbry.
 Thanks to Coolguy3289 for picking this project back up and getting the software compatible with lbrycrd again.
-

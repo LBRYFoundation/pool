@@ -14,7 +14,7 @@ $markets = dbolist("SELECT M.id, M.name, M.priority, MIN(MH.balance) AS min, MAX
 	GROUP BY M.id, M.name, M.priority HAVING max > 0
 	ORDER BY M.priority DESC, M.name");
 
-$stackedMax = (double) 0;
+$stackedMax = (float) 0;
 
 $series = array();
 foreach ($markets as $m) {
@@ -26,7 +26,7 @@ foreach ($markets as $m) {
 	$max = 0;
 	foreach($stats as $histo) {
 		$d = date('Y-m-d H:i', $histo->time);
-		$series[$m['name']][] = array($d, (double) bitcoinvaluetoa($histo->balance));
+		$series[$m['name']][] = array($d, (float) bitcoinvaluetoa($histo->balance));
 
 		$max = max($max, $histo->balance);
 	}
@@ -41,7 +41,7 @@ $stats = getdbolist('db_market_history', "time>$t AND idcoin={$id} AND idmarket 
 $max = 0;
 foreach($stats as $histo) {
 	$d = date('Y-m-d H:i', $histo->time);
-	$series[YAAMP_SITE_NAME][] = array($d, (double) bitcoinvaluetoa($histo->balance));
+	$series[YAAMP_SITE_NAME][] = array($d, (float) bitcoinvaluetoa($histo->balance));
 	$max = max($max, $histo->balance);
 }
 $stackedMax += $max;
@@ -82,6 +82,6 @@ foreach ($series as $name => $serie) {
 echo json_encode(array(
 	'data'=>array_values($series),
 	'labels'=>array_keys($series),
-	'rangeMin'=> (double) 0.0,
+	'rangeMin'=> (float) 0.0,
 	'rangeMax'=> ($stackedMax * 1.10),
 ));

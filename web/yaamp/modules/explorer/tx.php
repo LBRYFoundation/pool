@@ -32,7 +32,10 @@ span.monospace { font-family: monospace; }
 END;
 
 $tx = $remote->getrawtransaction($txhash, 1);
-if(!$tx) continue;
+if(!$tx) {
+	echo "</tbody></table>";
+	return;
+}
 
 $valuetx = 0;
 foreach($tx['vout'] as $vout)

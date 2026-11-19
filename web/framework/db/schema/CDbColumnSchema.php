@@ -3,9 +3,9 @@
  * CDbColumnSchema class file.
  *
  * @author Qiang Xue <qiang.xue@gmail.com>
- * @link http://www.yiiframework.com/
+ * @link https://www.yiiframework.com/
  * @copyright 2008-2013 Yii Software LLC
- * @license http://www.yiiframework.com/license/
+ * @license https://www.yiiframework.com/license/
  */
 
 /**
@@ -144,8 +144,8 @@ class CDbColumnSchema extends CComponent
 		switch($this->type)
 		{
 			case 'string': return (string)$value;
-			case 'integer': return (integer)$value;
-			case 'boolean': return (boolean)$value;
+			case 'integer': return (int)$value;
+			case 'boolean': return (bool)$value;
 			case 'double':
 			default: return $value;
 		}

@@ -50,12 +50,12 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 	{
 		char notify_id[1024] = { 0 };
 		if (json_params->u.array.values[1]->u.string.ptr)
-			strncpy(notify_id, json_params->u.array.values[1]->u.string.ptr, 1023);
+			snprintf(notify_id, sizeof(notify_id), "%s", json_params->u.array.values[1]->u.string.ptr);
 
 		YAAMP_CLIENT *client1 = client_find_notify_id(notify_id, true);
 		if(client1)
 		{
-			strncpy(client->notify_id, notify_id, 1023);
+			snprintf(client->notify_id, sizeof(client->notify_id), "%s", notify_id);
 
 			client->jobid_locked = client1->jobid_locked;
 			client->difficulty_actual = client1->difficulty_actual;
@@ -85,7 +85,7 @@ bool client_subscribe(YAAMP_CLIENT *client, json_value *json_params)
 			YAAMP_CLIENT *client1 = client_find_notify_id(notify_id, false);
 			if(client1)
 			{
-				strncpy(client->notify_id, notify_id, 1023);
+				snprintf(client->notify_id, sizeof(client->notify_id), "%s", notify_id);
 
 				client->difficulty_actual = client1->difficulty_actual;
 				client->speed = client1->speed;
@@ -328,9 +328,8 @@ bool client_update_block(YAAMP_CLIENT *client, json_value *json_params)
 
 bool client_ask_stats(YAAMP_CLIENT *client)
 {
-	int id;
 	if (!client->stats) return false;
-	id = client_ask(client, "client.get_stats", "[]");
+	client_ask(client, "client.get_stats", "[]");
 	return true;
 }
 

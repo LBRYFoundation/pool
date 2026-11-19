@@ -82,9 +82,9 @@ class GraphesCommand extends CConsoleCommand
 			$t = (int) $row['time'];
 			$d = $t - $t2;
 			if (!$t2) $d = 0;
-			$h = strftime('%H:%M', $t);
+			$h = date('H:i', $t);
 			if ($d && $d != 900) {
-				$h0 = strftime('%H:%M', $t2);
+				$h0 = date('H:i', $t2);
 				echo "hole detected between $h0 and $h ($d sec, $t)\n";
 				$fill = new db_hashrate;
 				$fill->isNewRecord = true;
@@ -126,8 +126,8 @@ class GraphesCommand extends CConsoleCommand
 			$d = $t - $t2;
 			if (!$t2 || arraySafeVal($last_row,'userid') != $row->userid) $d = 0;
 			if ($d && $d != 900 && $row->hashrate > 0) {
-				$h = strftime('%H:%M', $t);
-				$h0 = strftime('%H:%M', $t2);
+				$h = date('H:i', $t);
+				$h0 = date('H:i', $t2);
 				echo "uid {$row->userid}: hole detected between $h0 and $h ($d sec, ts $t)\n";
 				$fill = new db_hashuser;
 				$fill->isNewRecord = true;
@@ -168,8 +168,8 @@ class GraphesCommand extends CConsoleCommand
 			if (!$t2 || $last_row['userid'] != $row['userid']) $d = 0;
 			if ($d && $d != 900 && ($row['pending'] + $row['balance']) > 0) {
 				if ($d > 3600) continue;
-				$h = strftime('%H:%M', $t);
-				$h0 = strftime('%H:%M', $t2);
+				$h = date('H:i', $t);
+				$h0 = date('H:i', $t2);
 				echo $row['username'].": hole detected between $h0 and $h ($d sec, $t)\n";
 				$fill = new db_balanceuser;
 				$fill->isNewRecord = true;

@@ -75,7 +75,7 @@ function NotifyCheckRules()
 				$message  = "Description: {$rule->description}\n\n";
 
 				$message .= "Field: {$field}\n";
-				$message .= "Value: {$value} at ".strftime("%Y-%m-%d %T %z", $time)."\n";
+				$message .= "Value: {$value} at ".date("Y-m-d H:i:s O", $time)."\n";
 
 				// replace some possible vars in message (description)
 				$message = str_replace('$X', $value, $message);
